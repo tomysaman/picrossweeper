@@ -99,7 +99,6 @@
       linear-gradient(-45deg, transparent 44%, var(--x-mark) 44%, var(--x-mark) 56%, transparent 56%);
     opacity: .9;
   }
-  .t.out { opacity: .28; }                              /* tiles belonging to a neighbouring region */
   .caption { text-align: center; color: var(--muted); font-size: 13px; font-style: italic; margin-top: 8px; }
 
   /* ---------- The three doors ---------- */
@@ -191,7 +190,7 @@
   </a>
 
   <a class="door feature" href="giant.html">
-    <span class="art"><span class="grid" id="d-giant"></span></span>
+    <span class="art"><img src="shots/giant-card.png" alt="A giant grid part way through: solved regions showing the painting underneath, neighbouring regions still covered in numbered tiles."></span>
     <p class="kicker">The big one</p>
     <h2>Giant grid</h2>
     <p class="blurb">54,000 tiles over a single classic painting, cut into hundreds of irregular regions and
@@ -222,7 +221,7 @@ themeSel.addEventListener('change', () => {
 });
 
 /* Board diagrams, one row per line: each token is a state letter (L light, D dark, U unknown) plus
-   either a clue digit or "-", with a trailing "o" for a tile that belongs to a neighbouring region. */
+   either a clue digit or "-". */
 function diagram(el, spec, size) {
   const rows = spec.trim().split('\n').map(r => r.trim().split(/\s+/));
   el.style.gridTemplateColumns = 'repeat(' + rows[0].length + ', var(--t))';
@@ -230,7 +229,7 @@ function diagram(el, spec, size) {
   el.innerHTML = '';
   for (const row of rows) for (const tok of row) {
     const d = document.createElement('div');
-    d.className = 't' + (tok[0] === 'L' ? ' light' : tok[0] === 'D' ? ' dark' : '') + (tok.includes('o') ? ' out' : '');
+    d.className = 't' + (tok[0] === 'L' ? ' light' : tok[0] === 'D' ? ' dark' : '');
     if (tok[1] >= '0' && tok[1] <= '9') { d.textContent = tok[1]; d.classList.add('has-num'); }
     el.appendChild(d);
   }
@@ -246,14 +245,6 @@ const RULE = [
 draw('d-rule', RULE, 44);
 draw('d-tutorial', RULE, 32);
 
-/* A fragment of a giant board: the region you are on, with neighbouring regions dimmed around it. */
-draw('d-giant', [
-  'Uo Uo U3 U5 U4 Uo Uo',
-  'Uo U2 U- U4 U- U3 Uo',
-  'U3 U- U5 U- U6 U- U4',
-  'Uo U4 U- U3 U- U5 Uo',
-  'Uo Uo U2 U- U4 Uo Uo',
-].join('\n'), 22);
 </script>
 </body>
 </html>
