@@ -178,7 +178,7 @@
   <div id="minimap" class="overlay"><canvas id="minimapCanvas"></canvas></div>
   <div id="loading" class="overlay">Loading picture…</div>
   <div id="help" class="overlay" hidden>
-    <b>One giant picture, hundreds of regions.</b> The whole painting is one grid, cut into 15×15 <b>regions</b> (outlined).
+    <b>One giant picture, hundreds of regions.</b> The whole painting is one grid, cut into <b>regions</b> of random shapes and sizes (outlined).
     Each <b>number</b> says how many <b>light</b> tiles are in the 3×3 block around it — the numbered tile counts itself,
     and only tiles inside the same region count. Mark every tile light or dark; when a region is fully correct it reveals the painting.
     Every region is solvable by pure logic.<br>
@@ -199,7 +199,8 @@
 
 // ============================================================ Utilities
 const UNK = 0, LIGHT = 1, DARK = 2;
-const REGION = 15;                       // regions are REGION × REGION tiles
+const REGION_MEAN = 225;                 // average tiles per region; actual regions vary in size and shape
+const MIN_REGION = 80;                   // smaller fragments get merged into a neighbour
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 function mulberry32(seed) {
@@ -213,32 +214,85 @@ function mulberry32(seed) {
 function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
 function shuffle(a, rnd) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
-// ============================================================ Puzzle engine (w × h, clipped 3×3 neighbourhoods)
-function neighborsOf(w, h) {
-  const nb = new Array(w * h);
-  for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) {
-    const list = [];
-    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
-      const rr = r + dr, cc = c + dc;
-      if (rr >= 0 && rr < h && cc >= 0 && cc < w) list.push(rr * w + cc);
-    }
-    nb[r * w + c] = list;
-  }
-  return nb;
+// ============================================================ Region partition (organic, random-sized regions)
+// Multi-source Dijkstra over a noisy cost field = a weighted Voronoi diagram with wobbly borders.
+// Each seed gets a random head start, so regions come out in different sizes. Deterministic per seed.
+class MinHeap {
+  constructor() { this.k = []; this.v = []; }
+  push(k, v) { const K = this.k, V = this.v; let i = K.length; K.push(k); V.push(v);
+    while (i > 0) { const p = (i - 1) >> 1; if (K[p] <= K[i]) break; [K[p], K[i]] = [K[i], K[p]]; [V[p], V[i]] = [V[i], V[p]]; i = p; } }
+  pop() { const K = this.k, V = this.v, top = [K[0], V[0]], lk = K.pop(), lv = V.pop();
+    if (K.length) { K[0] = lk; V[0] = lv; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i;
+      if (l < K.length && K[l] < K[m]) m = l; if (r < K.length && K[r] < K[m]) m = r; if (m === i) break;
+      [K[m], K[i]] = [K[i], K[m]]; [V[m], V[i]] = [V[i], V[m]]; i = m; } }
+    return top; }
+  get size() { return this.k.length; }
 }
-const NB = neighborsOf(REGION, REGION);   // every region shares the same neighbourhood table
+function partition(W, H, rnd) {
+  const N = W * H, K = Math.max(1, Math.round(N / REGION_MEAN));
+  // Seeds on a jittered grid so they're spread out but not regular.
+  const gc = Math.max(1, Math.round(Math.sqrt(K * W / H))), gr = Math.max(1, Math.ceil(K / gc));
+  const seeds = [];
+  for (let j = 0; j < gr; j++) for (let i = 0; i < gc; i++) {
+    if (seeds.length >= K) break;
+    const x = clamp(Math.floor((i + 0.15 + rnd() * 0.7) * W / gc), 0, W - 1), y = clamp(Math.floor((j + 0.15 + rnd() * 0.7) * H / gr), 0, H - 1);
+    seeds.push(y * W + x);
+  }
+  const cost = new Float32Array(N); for (let i = 0; i < N; i++) cost[i] = 0.6 + rnd() * 1.6;
+  const dist = new Float32Array(N).fill(Infinity), id = new Int32Array(N).fill(-1);
+  const heap = new MinHeap();
+  seeds.forEach((s, k) => { dist[s] = -rnd() * 14; heap.push(dist[s], s * seeds.length + k); });
+  while (heap.size) {
+    const [d, code] = heap.pop(); const c = Math.floor(code / seeds.length), k = code % seeds.length;
+    if (id[c] !== -1) continue;
+    id[c] = k;
+    const x = c % W, y = (c / W) | 0;
+    for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
+      if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+      const n = ny * W + nx; if (id[n] !== -1) continue;
+      const nd = d + cost[n]; if (nd < dist[n]) { dist[n] = nd; heap.push(nd, n * seeds.length + k); }
+    }
+  }
+  // Merge fragments that are too small into their most-touched neighbour, then compact ids.
+  for (let pass = 0; pass < 4; pass++) {
+    const size = new Map(); for (let i = 0; i < N; i++) size.set(id[i], (size.get(id[i]) || 0) + 1);
+    const small = [...size].filter(([, n]) => n < MIN_REGION).map(([r]) => r);
+    if (!small.length) break;
+    for (const r of small) {
+      const touch = new Map();
+      for (let i = 0; i < N; i++) if (id[i] === r) { const x = i % W, y = (i / W) | 0;
+        for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) { if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue; const o = id[ny * W + nx]; if (o !== r) touch.set(o, (touch.get(o) || 0) + 1); } }
+      if (!touch.size) continue;
+      const to = [...touch].sort((a, b) => b[1] - a[1])[0][0];
+      for (let i = 0; i < N; i++) if (id[i] === r) id[i] = to;
+    }
+  }
+  const remap = new Map(); for (let i = 0; i < N; i++) if (!remap.has(id[i])) remap.set(id[i], remap.size);
+  for (let i = 0; i < N; i++) id[i] = remap.get(id[i]);
+  return { id, count: remap.size };
+}
+
+// ============================================================ Puzzle engine (arbitrary cell sets)
+// 8-neighbourhoods (including self) restricted to the cells of one region; indices are region-local.
+function regionNeighbors(cells, W, rid, r, localIdx) {
+  return cells.map(g => { const x = g % W, y = (g / W) | 0, list = [];
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const nx = x + dx, ny = y + dy; if (nx < 0 || ny < 0 || nx >= W) continue;
+      const n = ny * W + nx; if (n < rid.length && rid[n] === r) list.push(localIdx[n]); }
+    return list; });
+}
 
 // Constraint-propagation solver: single-clue rule + pairwise subset rule. Never guesses.
-function solve(w, h, nb, clues, initial, maxSteps = Infinity) {
-  const state = initial ? Uint8Array.from(initial) : new Uint8Array(w * h);
+function solve(nb, clues, initial, maxSteps = Infinity) {
+  const total = nb.length;
+  const state = initial ? Uint8Array.from(initial) : new Uint8Array(total);
   const clueCells = [];
-  for (let i = 0; i < w * h; i++) if (clues[i] >= 0) clueCells.push(i);
+  for (let i = 0; i < total; i++) if (clues[i] >= 0) clueCells.push(i);
+  // Clues whose neighbourhoods overlap are the only pairs the subset rule can use.
+  const touching = new Array(total); for (let i = 0; i < total; i++) touching[i] = [];
+  for (const a of clueCells) for (const j of nb[a]) touching[j].push(a);
   const near = new Map();
-  for (const a of clueCells) {
-    const ra = (a / w) | 0, ca = a % w, list = [];
-    for (const b of clueCells) if (b !== a && Math.abs(((b / w) | 0) - ra) <= 2 && Math.abs(b % w - ca) <= 2) list.push(b);
-    near.set(a, list);
-  }
+  for (const a of clueCells) { const s = new Set(); for (const j of nb[a]) for (const b of touching[j]) if (b !== a) s.add(b); near.set(a, [...s]); }
   const info = i => {
     let lit = 0; const unk = [];
     for (const j of nb[i]) { if (state[j] === LIGHT) lit++; else if (state[j] === UNK) unk.push(j); }
@@ -278,28 +332,39 @@ function solve(w, h, nb, clues, initial, maxSteps = Infinity) {
 }
 
 // Deterministic (seeded) generator: adds clues until logic alone solves the region, then prunes.
-function makeRegionClues(target, keep, rnd) {
-  const w = REGION, h = REGION, total = w * h, nb = NB;
+// Irregular regions can contain "twin" tiles whose neighbourhoods are identical, which no clue set can
+// separate; in that case one stuck tile's target is flipped (a 1-tile change to the art) and we retry.
+// The (possibly modified) target is returned alongside the clues.
+function makeRegionClues(target, nb, keep, rnd) {
+  const total = nb.length;
   const count = i => { let s = 0; for (const j of nb[i]) s += target[j]; return s; };
-  const clues = new Int8Array(total).fill(-1);
-  for (const i of shuffle([...Array(total).keys()], rnd).slice(0, Math.round(total * 0.18))) clues[i] = count(i);
-  for (;;) {
-    const { state, solved } = solve(w, h, nb, clues);
-    if (solved) break;
-    const cand = new Set();
-    for (let i = 0; i < total; i++) if (state[i] === UNK) for (const j of nb[i]) if (clues[j] < 0) cand.add(j);
-    const list = [...cand];
-    const frontier = list.filter(i => state[i] === UNK && nb[i].some(j => state[j] !== UNK));
-    const pool = frontier.length ? frontier : list;
-    const pick = pool[Math.floor(rnd() * pool.length)];
-    clues[pick] = count(pick);
+  let clues, flips = 0;
+  attempt: for (;;) {
+    clues = new Int8Array(total).fill(-1);
+    for (const i of shuffle([...Array(total).keys()], rnd).slice(0, Math.round(total * 0.18))) clues[i] = count(i);
+    for (;;) {
+      const { state, solved } = solve(nb, clues);
+      if (solved) break attempt;
+      const cand = new Set();
+      for (let i = 0; i < total; i++) if (state[i] === UNK) for (const j of nb[i]) if (clues[j] < 0) cand.add(j);
+      const list = [...cand];
+      if (!list.length) {   // every relevant tile is already a clue → ambiguous twins; alter the art minimally
+        const stuck = []; for (let i = 0; i < total; i++) if (state[i] === UNK) stuck.push(i);
+        target[stuck[Math.floor(rnd() * stuck.length)]] ^= 1; flips++;
+        continue attempt;
+      }
+      const frontier = list.filter(i => state[i] === UNK && nb[i].some(j => state[j] !== UNK));
+      const pool = frontier.length ? frontier : list;
+      const pick = pool[Math.floor(rnd() * pool.length)];
+      clues[pick] = count(pick);
+    }
   }
   for (const i of shuffle([...Array(total).keys()].filter(i => clues[i] >= 0), rnd)) {
     if (rnd() < keep) continue;
     const v = clues[i]; clues[i] = -1;
-    if (!solve(w, h, nb, clues).solved) clues[i] = v;
+    if (!solve(nb, clues).solved) clues[i] = v;
   }
-  return clues;
+  return { clues, target, flips };
 }
 
 // ============================================================ Art sources (public domain paintings on Wikimedia Commons)
@@ -370,9 +435,7 @@ const view = { scale: 8, ox: 0, oy: 0 };
 // Build the grid from a loaded image.
 function buildGame(img, key, totalTiles, keep) {
   const aspect = img.naturalWidth / img.naturalHeight;
-  const cols = Math.max(1, Math.round(Math.sqrt(totalTiles * aspect) / REGION));
-  const rows = Math.max(1, Math.round(Math.sqrt(totalTiles / aspect) / REGION));
-  const W = cols * REGION, H = rows * REGION, N = W * H;
+  const W = Math.max(20, Math.round(Math.sqrt(totalTiles * aspect))), H = Math.max(20, Math.round(Math.sqrt(totalTiles / aspect))), N = W * H;
 
   // Downsample the painting to one pixel per tile.
   const off = document.createElement('canvas'); off.width = W; off.height = H;
@@ -390,15 +453,27 @@ function buildGame(img, key, totalTiles, keep) {
   const target = new Uint8Array(N);
   for (let i = 0; i < N; i++) target[i] = lum[i] > 0.55 * blur[i] + 0.45 * globalMean ? 1 : 0;
 
-  G = { key, W, H, N, cols, rows, target, rgb, keep,
-        marks: new Uint8Array(N), regions: new Array(cols * rows).fill(null), done: new Uint8Array(cols * rows),
+  // Cut the grid into organic regions (deterministic for this picture + size).
+  const { id: rid, count } = partition(W, H, mulberry32(hashStr(`${key}:${W}x${H}:regions`)));
+  const localIdx = new Int32Array(N), cellsOf = Array.from({ length: count }, () => []);
+  for (let g = 0; g < N; g++) { localIdx[g] = cellsOf[rid[g]].length; cellsOf[rid[g]].push(g); }
+  const reg = cellsOf.map((cells, r) => {
+    let minx = W, miny = H, maxx = 0, maxy = 0;
+    for (const g of cells) { const x = g % W, y = (g / W) | 0; if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y; }
+    return { cells, nb: null, clues: null, bbox: [minx, miny, maxx, maxy] };
+  });
+  G = { key, W, H, N, count, rid, localIdx, reg, target, rgb, keep, flips: 0,
+        marks: new Uint8Array(N), done: new Uint8Array(count),
         pix: new ImageData(W, H), tileCanvas: Object.assign(document.createElement('canvas'), { width: W, height: H }) };
+  for (let r = 0; r < count; r++) G.reg[r].nb = regionNeighbors(G.reg[r].cells, W, rid, r, localIdx);
+  // Generate every region up front (~1 s): clues are then fixed before progress is restored,
+  // so completion checks and the revealed art always agree with what the player solved.
+  for (let r = 0; r < count; r++) ensureRegion(r);
   loadProgress();
-  for (let r = 0; r < cols * rows; r++) G.done[r] = regionComplete(r) ? 1 : 0;
+  for (let r = 0; r < count; r++) G.done[r] = regionComplete(r) ? 1 : 0;
   repaintAll();
   history = []; wrongSet.clear(); hinted = -1;
   fitView();
-  scheduleIdleGeneration();
   updateStatus();
 }
 
@@ -416,41 +491,25 @@ function boxBlur(src, W, H, R) {
 }
 
 // ---------- region helpers ----------
-const regionOf = g => (((g / G.W) | 0) / REGION | 0) * G.cols + ((g % G.W) / REGION | 0);
-const regionOrigin = r => [(r % G.cols) * REGION, ((r / G.cols) | 0) * REGION];   // [x0, y0]
-function regionCells(r) { const [x0, y0] = regionOrigin(r); const out = []; for (let y = 0; y < REGION; y++) for (let x = 0; x < REGION; x++) out.push((y0 + y) * G.W + x0 + x); return out; }
-function localTarget(r) { const t = new Uint8Array(REGION * REGION); regionCells(r).forEach((g, i) => t[i] = G.target[g]); return t; }
-function localMarks(r) { const m = new Uint8Array(REGION * REGION); regionCells(r).forEach((g, i) => m[i] = G.marks[g]); return m; }
+const regionOf = g => G.rid[g];
+const regionCells = r => G.reg[r].cells;
+function localTarget(r) { const c = regionCells(r), t = new Uint8Array(c.length); for (let i = 0; i < c.length; i++) t[i] = G.target[c[i]]; return t; }
+function localMarks(r) { const c = regionCells(r), m = new Uint8Array(c.length); for (let i = 0; i < c.length; i++) m[i] = G.marks[c[i]]; return m; }
 function ensureRegion(r) {
-  if (!G.regions[r]) G.regions[r] = makeRegionClues(localTarget(r), G.keep, mulberry32(hashStr(`${G.key}:${G.W}x${G.H}:${r}`)));
-  return G.regions[r];
+  const R = G.reg[r];
+  if (!R.clues) {
+    const res = makeRegionClues(localTarget(r), R.nb, G.keep, mulberry32(hashStr(`${G.key}:${G.W}x${G.H}:${r}`)));
+    R.clues = res.clues; G.flips += res.flips;
+    if (res.flips) R.cells.forEach((g, i) => G.target[g] = res.target[i]);   // write back the altered art
+  }
+  return R.clues;
 }
 function regionComplete(r) { for (const g of regionCells(r)) if (G.marks[g] === UNK || (G.marks[g] === LIGHT) !== (G.target[g] === 1)) return false; return true; }
-function clueAt(g) {   // clue value at a global cell, or -1 (generates the region if needed)
-  const r = regionOf(g), clues = ensureRegion(r); const [x0, y0] = regionOrigin(r);
-  return clues[(((g / G.W) | 0) - y0) * REGION + (g % G.W - x0)];
-}
+function clueAt(g) { return ensureRegion(G.rid[g])[G.localIdx[g]]; }   // clue value at a global cell, or -1
 function clueDone(g) {  // every tile in the (region-clipped) 3×3 block is marked
-  const r = regionOf(g), [x0, y0] = regionOrigin(r), lx = g % G.W - x0, ly = ((g / G.W) | 0) - y0;
-  for (const j of NB[ly * REGION + lx]) if (G.marks[(y0 + ((j / REGION) | 0)) * G.W + x0 + j % REGION] === UNK) return false;
+  const R = G.reg[G.rid[g]], cells = R.cells;
+  for (const j of R.nb[G.localIdx[g]]) if (G.marks[cells[j]] === UNK) return false;
   return true;
-}
-
-// Generate regions in the background so digits appear instantly when you zoom in.
-let idleQueued = false;
-function scheduleIdleGeneration() {
-  if (idleQueued) return; idleQueued = true;
-  const step = deadline => {
-    const g = G; if (!g) { idleQueued = false; return; }
-    while ((deadline.timeRemaining ? deadline.timeRemaining() > 8 : true)) {
-      const r = g.regions.findIndex(x => x === null);
-      if (r < 0) { idleQueued = false; return; }
-      ensureRegion(r);
-      if (!deadline.timeRemaining) break;
-    }
-    (window.requestIdleCallback || (f => setTimeout(() => f({}), 30)))(step);
-  };
-  (window.requestIdleCallback || (f => setTimeout(() => f({}), 30)))(step);
 }
 
 // ---------- pixel buffer (1 px per tile) ----------
@@ -472,7 +531,7 @@ function setMark(g, v, record = true) {
   if (record) history.push([g, G.marks[g]]);
   G.marks[g] = v; wrongSet.delete(g);
   paintTile(g);
-  if (regionComplete(r)) { G.done[r] = 1; repaintRegion(r); setStatus(`<b>Region ${r + 1} revealed!</b> ${doneCount()} of ${G.cols * G.rows} regions complete`, 'win'); }
+  if (regionComplete(r)) { G.done[r] = 1; repaintRegion(r); setStatus(`<b>Region ${r + 1} revealed!</b> ${doneCount()} of ${G.count} regions complete`, 'win'); }
   else flushPix();
   saveProgressSoon(); requestDraw();
 }
@@ -480,11 +539,12 @@ const doneCount = () => G.done.reduce((s, v) => s + v, 0);
 let saveTimer = null;
 function saveProgressSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(saveProgress, 400); }
 function saveProgress() {
-  try { localStorage.setItem(`pw.save.${G.key}.${G.W}x${G.H}`, btoa(String.fromCharCode(...G.marks))); } catch {}
+  try { localStorage.setItem(saveKey(), btoa(String.fromCharCode(...G.marks))); } catch {}
 }
+const saveKey = () => `pw.save.v2.${G.key}.${G.W}x${G.H}`;
 function loadProgress() {
   try {
-    const s = localStorage.getItem(`pw.save.${G.key}.${G.W}x${G.H}`); if (!s) return;
+    const s = localStorage.getItem(saveKey()); if (!s) return;
     const b = atob(s); if (b.length !== G.N) return;
     for (let i = 0; i < G.N; i++) G.marks[i] = b.charCodeAt(i);
   } catch {}
@@ -541,10 +601,14 @@ function draw() {
     for (let y = y0; y <= y1; y++) { const Y = Math.round(sy(y)) + .5; ctx.moveTo(sx(x0), Y); ctx.lineTo(sx(x1), Y); }
     ctx.stroke();
   }
-  if (s >= 2.5) {  // region borders
+  if (s >= 2.5) {  // region borders: every edge between two tiles of different regions
     ctx.strokeStyle = C.regionLine; ctx.lineWidth = s >= 10 ? 2 : 1; ctx.beginPath();
-    for (let x = Math.ceil(x0 / REGION) * REGION; x <= x1; x += REGION) { ctx.moveTo(sx(x), sy(y0)); ctx.lineTo(sx(x), sy(y1)); }
-    for (let y = Math.ceil(y0 / REGION) * REGION; y <= y1; y += REGION) { ctx.moveTo(sx(x0), sy(y)); ctx.lineTo(sx(x1), sy(y)); }
+    const rid = G.rid, W = G.W;
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+      const g = y * W + x, r = rid[g];
+      if (x + 1 < W && rid[g + 1] !== r) { ctx.moveTo(sx(x + 1), sy(y)); ctx.lineTo(sx(x + 1), sy(y + 1)); }
+      if (y + 1 < G.H && rid[g + W] !== r) { ctx.moveTo(sx(x), sy(y + 1)); ctx.lineTo(sx(x + 1), sy(y + 1)); }
+    }
     ctx.stroke();
   }
   if (s >= 12) {   // digits and X marks
@@ -565,10 +629,17 @@ function draw() {
     ctx.lineWidth = Math.max(2, s * 0.15); ctx.strokeStyle = C.bad;
     for (const g of wrongSet) ctx.strokeRect(sx(g % G.W) + 1, sy((g / G.W) | 0) + 1, s - 2, s - 2);
     if (hinted >= 0) { ctx.strokeStyle = C.accent; ctx.strokeRect(sx(hinted % G.W) + 1, sy((hinted / G.W) | 0) + 1, s - 2, s - 2); }
-    // current region outline
-    const [rx, ry] = regionOrigin(currentRegion);
-    ctx.strokeStyle = C.accent; ctx.lineWidth = 2; ctx.globalAlpha = .9;
-    ctx.strokeRect(sx(rx), sy(ry), REGION * s, REGION * s); ctx.globalAlpha = 1;
+    // current region outline, traced along its true edge
+    const rid = G.rid, W = G.W, H = G.H, cr = currentRegion;
+    ctx.strokeStyle = C.accent; ctx.lineWidth = 2.5; ctx.globalAlpha = .9; ctx.beginPath();
+    for (const g of regionCells(cr)) {
+      const x = g % W, y = (g / W) | 0;
+      if (x + 1 >= W || rid[g + 1] !== cr) { ctx.moveTo(sx(x + 1), sy(y)); ctx.lineTo(sx(x + 1), sy(y + 1)); }
+      if (x === 0 || rid[g - 1] !== cr) { ctx.moveTo(sx(x), sy(y)); ctx.lineTo(sx(x), sy(y + 1)); }
+      if (y + 1 >= H || rid[g + W] !== cr) { ctx.moveTo(sx(x), sy(y + 1)); ctx.lineTo(sx(x + 1), sy(y + 1)); }
+      if (y === 0 || rid[g - W] !== cr) { ctx.moveTo(sx(x), sy(y)); ctx.lineTo(sx(x + 1), sy(y)); }
+    }
+    ctx.stroke(); ctx.globalAlpha = 1;
   }
   drawMinimap();
 }
@@ -589,7 +660,7 @@ $('minimap').addEventListener('pointerdown', e => {
 function updateStatus() {
   if (!G) return;
   const marked = G.marks.reduce((s, v) => s + (v !== UNK), 0);
-  setStatus(`<b>${G.W}×${G.H}</b> = ${G.N.toLocaleString()} tiles · region <b>${currentRegion + 1}</b>/${G.cols * G.rows} · <b>${doneCount()}</b> regions revealed · ${(100 * marked / G.N).toFixed(1)}% marked`);
+  setStatus(`<b>${G.W}×${G.H}</b> = ${G.N.toLocaleString()} tiles · region <b>${currentRegion + 1}</b>/${G.count} (${regionCells(currentRegion).length} tiles) · <b>${doneCount()}</b> regions revealed · ${(100 * marked / G.N).toFixed(1)}% marked`);
 }
 
 // ============================================================ Input
@@ -675,7 +746,7 @@ $('clearBtn').onclick = () => {
 $('resetBtn').onclick = () => {
   if (!G) return;
   G.marks.fill(UNK); G.done.fill(0); history = []; wrongSet.clear(); hinted = -1;
-  try { localStorage.removeItem(`pw.save.${G.key}.${G.W}x${G.H}`); } catch {}
+  try { localStorage.removeItem(saveKey()); } catch {}
   repaintAll(); requestDraw(); updateStatus();
 };
 $('checkBtn').onclick = () => {
@@ -690,7 +761,7 @@ $('hintBtn').onclick = () => {
   const r = currentRegion, clues = ensureRegion(r), cellsG = regionCells(r);
   const base = localMarks(r), t = localTarget(r);
   for (let i = 0; i < base.length; i++) if (base[i] !== UNK && (base[i] === LIGHT) !== (t[i] === 1)) base[i] = UNK;   // ignore wrong marks
-  const { state } = solve(REGION, REGION, NB, clues, base, 1);
+  const { state } = solve(G.reg[r].nb, clues, base, 1);
   for (let i = 0; i < state.length; i++) if (state[i] !== UNK && G.marks[cellsG[i]] !== state[i]) {
     setMark(cellsG[i], state[i]); hinted = cellsG[i]; setStatus(`<b>Hint:</b> one tile deduced in region ${r + 1}`); requestDraw(); return;
   }
