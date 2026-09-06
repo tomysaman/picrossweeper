@@ -222,10 +222,7 @@
 
 <footer>
   Inspired by <a href="https://www.proverbsgame.com/" style="color:inherit">Proverbs</a>. Built as a playground project.<br>
-  Music streamed from <a href="https://commons.wikimedia.org/wiki/Category:Lute_music" style="color:inherit">Wikimedia Commons</a>:
-  <a href="https://commons.wikimedia.org/wiki/File:Balletto_detto_Il_conte_Orlando.ogg" style="color:inherit">Il conte Orlando</a> (US Marine Band, public domain) ·
-  <a href="https://commons.wikimedia.org/wiki/File:Ludwig_Senfl_--_Ach_Elslein.opus" style="color:inherit">Ach Elslein</a> (Collegium Vocale, CC BY 3.0) ·
-  <a href="https://commons.wikimedia.org/wiki/File:Butt_Music_-_Hieronymus_Bosch_(Lute).opus" style="color:inherit">Bosch lute piece</a> (panimetal7, CC BY 3.0)
+  Music streamed from <a href="https://commons.wikimedia.org/">Wikimedia Commons</a>: <span id="credits"></span>
 </footer>
 
 <script>
@@ -635,17 +632,45 @@ themeSel.onchange = () => applyTheme(themeSel.value);
 { let saved = null; try { saved = localStorage.getItem('pw.theme'); } catch {} applyTheme(saved || 'tavern'); }
 
 // ---------- Background music (streamed from Wikimedia Commons; PD / CC BY 3.0) ----------
+// All instrumental (no vocals), calm, and free to stream. `by` = performer · licence.
 const TRACKS = [
-  { title: 'Balletto detto “Il conte Orlando” — Respighi after Molinaro (1599)', by: 'US Marine Band · public domain',
+  // — piano —
+  { title: 'Gymnopédie No. 1 — Erik Satie', by: 'Kevin MacLeod · CC BY 3.0',
+    page: 'https://commons.wikimedia.org/wiki/File:Gymnopedie_No._1_(ISRC_USUAN1100787).mp3',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/2/2a/Gymnopedie_No._1_%28ISRC_USUAN1100787%29.mp3' },
+  { title: 'Gnossienne No. 1 — Erik Satie', by: 'La Pianista · public domain',
+    page: 'https://commons.wikimedia.org/wiki/File:Satie_-_Gnossienne_1.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/9/91/Satie_-_Gnossienne_1.ogg' },
+  { title: 'Nocturne in C♯ minor, Op. posth. — Frédéric Chopin', by: 'CC BY 3.0',
+    page: 'https://commons.wikimedia.org/wiki/File:Chopin,_Nocturne_in_C-sharp_minor,_Op._Posth.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/1/12/Chopin%2C_Nocturne_in_C-sharp_minor%2C_Op._Posth.ogg' },
+  { title: 'Clair de lune — Claude Debussy', by: 'public domain',
+    page: 'https://commons.wikimedia.org/wiki/File:Clair_de_lune_(Claude_Debussy)_Suite_bergamasque.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/b/be/Clair_de_lune_%28Claude_Debussy%29_Suite_bergamasque.ogg' },
+  // — strings —
+  { title: 'Cello Suite No. 1, Prélude — J. S. Bach', by: 'public domain',
+    page: 'https://commons.wikimedia.org/wiki/File:Bach_-_Cello_Suite_no._1_in_G_major,_BWV_1007_-_I._Pr%C3%A9lude.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/9/9d/Bach_-_Cello_Suite_no._1_in_G_major%2C_BWV_1007_-_I._Pr%C3%A9lude.ogg' },
+  { title: 'Violin Sonata No. 1, Adagio — J. S. Bach', by: 'CC0',
+    page: 'https://commons.wikimedia.org/wiki/File:J._S._Bach_%E2%80%93_Violin_Sonata_No.1_in_G_minor,_BWV_1001,_I._Adagio.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/8/8f/J._S._Bach_%E2%80%93_Violin_Sonata_No.1_in_G_minor%2C_BWV_1001%2C_I._Adagio.ogg' },
+  // — guitar —
+  { title: 'Recuerdos de la Alhambra — Francisco Tárrega', by: 'Carlo Alberto Boni · CC BY-SA 3.0',
+    page: 'https://commons.wikimedia.org/wiki/File:Recuerdos_de_la_Alhambra.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/a/a3/Recuerdos_de_la_Alhambra.ogg' },
+  { title: 'Canon in D (guitar) — Johann Pachelbel', by: 'Aitua · CC BY-SA 4.0',
+    page: 'https://commons.wikimedia.org/wiki/File:Pachelbel_-_Canon_in_D_major,_P._37_(Guitar).ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/a/ae/Pachelbel_-_Canon_in_D_major%2C_P._37_%28Guitar%29.ogg' },
+  // — early music (kept from the first playlist) —
+  { title: 'Balletto “Il conte Orlando” — Respighi after Molinaro (1599)', by: 'US Marine Band · public domain',
     page: 'https://commons.wikimedia.org/wiki/File:Balletto_detto_Il_conte_Orlando.ogg',
     src: 'https://upload.wikimedia.org/wikipedia/commons/1/17/Balletto_detto_Il_conte_Orlando.ogg' },
-  { title: 'Ach Elslein — Ludwig Senfl (c. 1520)', by: 'Collegium Vocale · CC BY 3.0',
-    page: 'https://commons.wikimedia.org/wiki/File:Ludwig_Senfl_--_Ach_Elslein.opus',
-    src: 'https://upload.wikimedia.org/wikipedia/commons/7/7f/Ludwig_Senfl_--_Ach_Elslein.opus' },
   { title: 'Lute piece from Bosch’s “Garden of Earthly Delights”', by: 'panimetal7 · CC BY 3.0',
     page: 'https://commons.wikimedia.org/wiki/File:Butt_Music_-_Hieronymus_Bosch_(Lute).opus',
     src: 'https://upload.wikimedia.org/wikipedia/commons/3/32/Butt_Music_-_Hieronymus_Bosch_%28Lute%29.opus' },
 ];
+// Footer credits are generated from the list so they can't drift out of sync.
+document.getElementById('credits').innerHTML = TRACKS.map(t => `<a href="${t.page}" target="_blank" rel="noopener">${t.title.split(' — ')[0]}</a> (${t.by})`).join(' · ');
 const audio = new Audio();
 audio.preload = 'none';
 const musicBtn = document.getElementById('musicBtn');
