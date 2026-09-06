@@ -1,0 +1,798 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Picrossweeper</title>
+<style>
+  /* ---------- Themes: every colour lives here; switch with <html data-theme="…"> ---------- */
+  :root, :root[data-theme="tavern"] {
+    /* "Tavern" — the original warm-wood look */
+    --bg: #2b2620;
+    --panel: #3a332b;
+    --ink: #f1e7d0;
+    --muted: #b9ad94;
+    --footer: #7d7160;
+    --btn: #4b4238;
+    --btn-border: #6a5e50;
+    --btn-hover: #5a5045;
+    --accent: #d9a441;
+    --accent-hover: #e6b556;
+    --on-accent: #2b2620;
+    --unknown: #6b6052;
+    --light: #f3e4b8;
+    --dark: #1c2a3a;
+    --x-mark: #4c5f78;
+    --clue-on-light: #000000;
+    --clue-on-dark: #e8dcbf;
+    --clue-on-unknown: #f7efdc;
+    /* digit colours once every tile around the clue has been marked (tile colour never changes) */
+    --clue-done-on-light: #7a7a7a;
+    --clue-done-on-dark: #5c6a7a;
+    --clue-done-on-unknown: #877b69;
+    --grid-line: rgba(0,0,0,.28);
+    --region-line: rgba(217,164,65,.55);
+    --bad: #c9503f;
+    --good: #7fb069;
+    --shadow: rgba(0,0,0,.4);
+  }
+  :root[data-theme="proverbs"] {
+    /* "Proverbs" — exact values from proverbsgame.com:
+       bgd #242746 · mid #294D5C · highlight #F78E55 · accent #733840 · text #FFFFFF */
+    --bg: #242746;
+    --panel: #294d5c;
+    --ink: #ffffff;
+    --muted: rgba(255,255,255,.72);
+    --footer: rgba(255,255,255,.45);
+    --btn: #242746;
+    --btn-border: #733840;
+    --btn-hover: #2f3358;
+    --accent: #f78e55;
+    --accent-hover: #f9a273;
+    --on-accent: #242746;
+    --unknown: #2c305c;          /* the in-game grid navy */
+    --light: #f78e55;            /* light tiles are the orange highlight */
+    --dark: #733840;             /* dark tiles are the site's red accent */
+    --x-mark: #a8555f;
+    --clue-on-light: #000000;
+    --clue-on-dark: #ffffff;
+    --clue-on-unknown: #ffffff;
+    --clue-done-on-light: #8a8a8a;
+    --clue-done-on-dark: #b08a8e;
+    --clue-done-on-unknown: #6d719a;
+    --grid-line: rgba(0,0,0,.35);
+    --region-line: rgba(247,142,85,.6);
+    --bad: #f78e55;
+    --good: #f78e55;
+    --shadow: rgba(0,0,0,.45);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 14px/1.4 Georgia, "Times New Roman", serif;
+    display: flex; flex-direction: column; user-select: none; overflow: hidden;
+  }
+  header {
+    display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center;
+    padding: 8px 12px; background: var(--panel); box-shadow: 0 2px 10px var(--shadow); z-index: 2;
+  }
+  header h1 { margin: 0 10px 0 0; font-size: 20px; font-weight: normal; color: var(--accent); letter-spacing: 1px; }
+  header label { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  select, button {
+    font: inherit; font-size: 13px; background: var(--btn); color: var(--ink);
+    border: 1px solid var(--btn-border); border-radius: 6px; padding: 5px 10px; cursor: pointer;
+  }
+  button:hover, select:hover { background: var(--btn-hover); }
+  button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: bold; }
+  button.primary:hover { background: var(--accent-hover); }
+  button.active { outline: 2px solid var(--accent); }
+  .group { display: inline-flex; gap: 6px; align-items: center; padding-left: 10px; border-left: 1px solid var(--btn-border); }
+  input[type=range] { width: 70px; accent-color: var(--accent); }
+
+  main { position: relative; flex: 1; min-height: 0; }
+  #view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+  #view.panning { cursor: grab; }
+  #view.panning:active { cursor: grabbing; }
+
+  .overlay { position: absolute; background: color-mix(in srgb, var(--panel) 85%, transparent); border-radius: 8px; padding: 6px 10px; font-size: 12px; color: var(--muted); pointer-events: none; }
+  #status { left: 10px; bottom: 10px; max-width: 60%; }
+  #status b { color: var(--ink); }
+  #status.bad b { color: var(--bad); }
+  #status.win b { color: var(--good); }
+  #nowPlaying { left: 10px; top: 10px; font-style: italic; }
+  #nowPlaying:empty { display: none; }
+  #nowPlaying a { color: inherit; pointer-events: auto; }
+  #nowPlaying.loading::after { content: " · loading…"; animation: blink 1.2s infinite; }
+  @keyframes blink { 50% { opacity: .35; } }
+  #minimap { right: 10px; bottom: 10px; padding: 4px; pointer-events: auto; cursor: pointer; line-height: 0; }
+  #minimap canvas { display: block; image-rendering: pixelated; border-radius: 4px; }
+  #loading { left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 16px; color: var(--ink); padding: 14px 22px; }
+  #help {
+    right: 10px; top: 10px; max-width: 360px; pointer-events: auto; line-height: 1.5;
+    background: color-mix(in srgb, var(--panel) 96%, transparent); box-shadow: 0 6px 20px var(--shadow);
+  }
+  #help b, #help kbd { color: var(--ink); }
+  #help kbd { font-family: inherit; border: 1px solid var(--btn-border); border-radius: 3px; padding: 0 4px; }
+  #help .sw { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -1px; margin-right: 3px; }
+  #help a { color: inherit; }
+  footer { font-size: 11px; color: var(--footer); padding: 4px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Picrossweeper</h1>
+  <label>Art
+    <select id="image"></select>
+  </label>
+  <input id="file" type="file" accept="image/*" hidden>
+  <label>Size
+    <select id="size">
+      <option value="6000">Small · ~6k tiles</option>
+      <option value="24000">Medium · ~24k</option>
+      <option value="54000" selected>Giant · ~54k</option>
+    </select>
+  </label>
+  <label>Clues
+    <select id="density">
+      <option value="0.8">Generous</option>
+      <option value="0.45" selected>Normal</option>
+      <option value="0">Minimal</option>
+    </select>
+  </label>
+  <span class="group">
+    <button id="panBtn" title="Pan tool (hold Space or drag with middle mouse also pans)">✋ Pan</button>
+    <button id="fitBtn" title="Zoom to fit (F)">Fit</button>
+    <button id="modeBtn" title="Which colour a left-click / tap paints (X)">Tap: ☀ light</button>
+  </span>
+  <span class="group">
+    <button id="checkBtn" title="Highlight mistakes in the current region">Check</button>
+    <button id="hintBtn" title="Reveal one deducible tile in the current region">Hint</button>
+    <button id="undoBtn" title="Undo (Ctrl+Z)">Undo</button>
+    <button id="clearBtn" title="Clear the current region">Clear region</button>
+    <button id="resetBtn" title="Erase all saved progress for this picture">Reset</button>
+  </span>
+  <span class="group">
+    <label>Theme
+      <select id="theme">
+        <option value="tavern">Tavern</option>
+        <option value="proverbs">Proverbs</option>
+      </select>
+    </label>
+  </span>
+  <span class="group">
+    <button id="musicBtn" title="Play / pause background music (M)">♪ Play</button>
+    <button id="nextBtn" title="Next track">⏭</button>
+    <input id="volume" type="range" min="0" max="1" step="0.02" value="0.5" title="Volume">
+  </span>
+  <span class="group"><button id="helpBtn" title="How to play (?)">?</button></span>
+</header>
+
+<main>
+  <canvas id="view"></canvas>
+  <div id="nowPlaying" class="overlay"></div>
+  <div id="status" class="overlay"></div>
+  <div id="minimap" class="overlay"><canvas id="minimapCanvas"></canvas></div>
+  <div id="loading" class="overlay">Loading picture…</div>
+  <div id="help" class="overlay" hidden>
+    <b>One giant picture, hundreds of regions.</b> The whole painting is one grid, cut into 15×15 <b>regions</b> (outlined).
+    Each <b>number</b> says how many <b>light</b> tiles are in the 3×3 block around it — the numbered tile counts itself,
+    and only tiles inside the same region count. Mark every tile light or dark; when a region is fully correct it reveals the painting.
+    Every region is solvable by pure logic.<br>
+    <span class="sw" style="background:var(--light)"></span>Left‑click / drag: light &nbsp;
+    <span class="sw" style="background:var(--dark)"></span>Right‑click / drag: dark &nbsp; click again: clear<br>
+    <b>Move around:</b> mouse wheel zooms · middle‑drag, <kbd>Space</kbd>+drag or the ✋ tool pans · arrows pan · <kbd>F</kbd> fits · pinch on touch · click the minimap to jump.<br>
+    <b>Keys:</b> <kbd>Ctrl+Z</kbd> undo · <kbd>X</kbd> tap colour · <kbd>M</kbd> music · <kbd>?</kbd> this panel.<br>
+    Progress is saved automatically in this browser, per picture. Choose “Your own image…” to play any wallpaper.
+  </div>
+</main>
+
+<footer>
+  Inspired by <a href="https://www.proverbsgame.com/">Proverbs</a>. Prefer bite-size puzzles? <a href="index.html">Single-puzzle version</a> ↗. Art: <span id="artCredit"></span>. Music from <a href="https://commons.wikimedia.org/">Wikimedia Commons</a>: <span id="credits"></span>
+</footer>
+
+<script>
+'use strict';
+
+// ============================================================ Utilities
+const UNK = 0, LIGHT = 1, DARK = 2;
+const REGION = 15;                       // regions are REGION × REGION tiles
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function shuffle(a, rnd) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+// ============================================================ Puzzle engine (w × h, clipped 3×3 neighbourhoods)
+function neighborsOf(w, h) {
+  const nb = new Array(w * h);
+  for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) {
+    const list = [];
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      const rr = r + dr, cc = c + dc;
+      if (rr >= 0 && rr < h && cc >= 0 && cc < w) list.push(rr * w + cc);
+    }
+    nb[r * w + c] = list;
+  }
+  return nb;
+}
+const NB = neighborsOf(REGION, REGION);   // every region shares the same neighbourhood table
+
+// Constraint-propagation solver: single-clue rule + pairwise subset rule. Never guesses.
+function solve(w, h, nb, clues, initial, maxSteps = Infinity) {
+  const state = initial ? Uint8Array.from(initial) : new Uint8Array(w * h);
+  const clueCells = [];
+  for (let i = 0; i < w * h; i++) if (clues[i] >= 0) clueCells.push(i);
+  const near = new Map();
+  for (const a of clueCells) {
+    const ra = (a / w) | 0, ca = a % w, list = [];
+    for (const b of clueCells) if (b !== a && Math.abs(((b / w) | 0) - ra) <= 2 && Math.abs(b % w - ca) <= 2) list.push(b);
+    near.set(a, list);
+  }
+  const info = i => {
+    let lit = 0; const unk = [];
+    for (const j of nb[i]) { if (state[j] === LIGHT) lit++; else if (state[j] === UNK) unk.push(j); }
+    return { need: clues[i] - lit, unk };
+  };
+  let steps = 0, changed = true;
+  while (changed && steps < maxSteps) {
+    changed = false;
+    for (const i of clueCells) {
+      const { need, unk } = info(i);
+      if (!unk.length) continue;
+      if (need === 0) { for (const j of unk) state[j] = DARK; changed = true; steps++; }
+      else if (need === unk.length) { for (const j of unk) state[j] = LIGHT; changed = true; steps++; }
+      if (steps >= maxSteps) return { state, solved: false };
+    }
+    if (changed) continue;
+    outer: for (const a of clueCells) {
+      const A = info(a);
+      if (!A.unk.length) continue;
+      const setA = new Set(A.unk);
+      for (const b of near.get(a)) {
+        const B = info(b);
+        if (B.unk.length <= A.unk.length) continue;
+        let subset = true;
+        for (const j of A.unk) if (!B.unk.includes(j)) { subset = false; break; }
+        if (!subset) continue;
+        const diff = B.unk.filter(j => !setA.has(j));
+        const needDiff = B.need - A.need;
+        if (needDiff === 0) { for (const j of diff) state[j] = DARK; changed = true; steps++; break outer; }
+        if (needDiff === diff.length) { for (const j of diff) state[j] = LIGHT; changed = true; steps++; break outer; }
+      }
+    }
+  }
+  let solved = true;
+  for (let i = 0; i < state.length; i++) if (state[i] === UNK) { solved = false; break; }
+  return { state, solved };
+}
+
+// Deterministic (seeded) generator: adds clues until logic alone solves the region, then prunes.
+function makeRegionClues(target, keep, rnd) {
+  const w = REGION, h = REGION, total = w * h, nb = NB;
+  const count = i => { let s = 0; for (const j of nb[i]) s += target[j]; return s; };
+  const clues = new Int8Array(total).fill(-1);
+  for (const i of shuffle([...Array(total).keys()], rnd).slice(0, Math.round(total * 0.18))) clues[i] = count(i);
+  for (;;) {
+    const { state, solved } = solve(w, h, nb, clues);
+    if (solved) break;
+    const cand = new Set();
+    for (let i = 0; i < total; i++) if (state[i] === UNK) for (const j of nb[i]) if (clues[j] < 0) cand.add(j);
+    const list = [...cand];
+    const frontier = list.filter(i => state[i] === UNK && nb[i].some(j => state[j] !== UNK));
+    const pool = frontier.length ? frontier : list;
+    const pick = pool[Math.floor(rnd() * pool.length)];
+    clues[pick] = count(pick);
+  }
+  for (const i of shuffle([...Array(total).keys()].filter(i => clues[i] >= 0), rnd)) {
+    if (rnd() < keep) continue;
+    const v = clues[i]; clues[i] = -1;
+    if (!solve(w, h, nb, clues).solved) clues[i] = v;
+  }
+  return clues;
+}
+
+// ============================================================ Art sources (public domain paintings on Wikimedia Commons)
+const thumb = (hash, name, px = 1280) => `https://upload.wikimedia.org/wikipedia/commons/thumb/${hash}/${name}/${px}px-${name}`;
+const IMAGES = [
+  { key: 'proverbs', name: 'Netherlandish Proverbs — Bruegel (1559)', credit: 'Pieter Bruegel the Elder, 1559 · public domain',
+    page: 'https://commons.wikimedia.org/wiki/File:Pieter_Bruegel_the_Elder_-_The_Dutch_Proverbs_-_Google_Art_Project.jpg',
+    url: thumb('7/7e', 'Pieter_Brueghel_the_Elder_-_The_Dutch_Proverbs_-_Google_Art_Project.jpg') },
+  { key: 'hunters', name: 'Hunters in the Snow — Bruegel (1565)', credit: 'Pieter Bruegel the Elder, 1565 · public domain',
+    page: 'https://commons.wikimedia.org/wiki/File:Pieter_Bruegel_the_Elder_-_Hunters_in_the_Snow_(Winter)_-_Google_Art_Project.jpg',
+    url: thumb('d/d8', 'Pieter_Bruegel_the_Elder_-_Hunters_in_the_Snow_%28Winter%29_-_Google_Art_Project.jpg') },
+  { key: 'babel', name: 'The Tower of Babel — Bruegel (1563)', credit: 'Pieter Bruegel the Elder, 1563 · public domain',
+    page: 'https://commons.wikimedia.org/wiki/File:Pieter_Bruegel_the_Elder_-_The_Tower_of_Babel_(Vienna)_-_Google_Art_Project_-_edited.jpg',
+    url: thumb('f/fc', 'Pieter_Bruegel_the_Elder_-_The_Tower_of_Babel_%28Vienna%29_-_Google_Art_Project_-_edited.jpg') },
+  { key: 'wave', name: 'The Great Wave off Kanagawa — Hokusai (c. 1831)', credit: 'Katsushika Hokusai, c. 1831 · public domain',
+    page: 'https://commons.wikimedia.org/wiki/File:The_Great_Wave_off_Kanagawa.jpg',
+    url: thumb('0/0a', 'The_Great_Wave_off_Kanagawa.jpg') },
+  { key: 'starry', name: 'The Starry Night — Van Gogh (1889)', credit: 'Vincent van Gogh, 1889 · public domain',
+    page: 'https://commons.wikimedia.org/wiki/File:Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg',
+    url: thumb('e/ea', 'Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg') },
+];
+
+// ============================================================ DOM
+const $ = id => document.getElementById(id);
+const canvas = $('view'), ctx = canvas.getContext('2d');
+const mini = $('minimapCanvas'), mctx = mini.getContext('2d');
+const statusEl = $('status'), loadingEl = $('loading');
+const imageSel = $('image'), sizeSel = $('size'), densitySel = $('density'), fileInput = $('file');
+const panBtn = $('panBtn'), modeBtn = $('modeBtn');
+
+for (const im of IMAGES) { const o = document.createElement('option'); o.value = im.key; o.textContent = im.name; imageSel.appendChild(o); }
+{ const o = document.createElement('option'); o.value = 'custom'; o.textContent = 'Your own image…'; imageSel.appendChild(o); }
+
+function setStatus(html, cls = '') { statusEl.innerHTML = html; statusEl.className = 'overlay ' + cls; }
+
+// ============================================================ Theme
+const themeSel = $('theme');
+let C = {};   // resolved theme colours for canvas drawing
+function readThemeColours() {
+  const cs = getComputedStyle(document.documentElement);
+  const v = n => cs.getPropertyValue(n).trim();
+  C = { unknown: v('--unknown'), light: v('--light'), dark: v('--dark'), xmark: v('--x-mark'),
+        clue: { [UNK]: v('--clue-on-unknown'), [LIGHT]: v('--clue-on-light'), [DARK]: v('--clue-on-dark') },
+        clueDone: { [UNK]: v('--clue-done-on-unknown'), [LIGHT]: v('--clue-done-on-light'), [DARK]: v('--clue-done-on-dark') },
+        gridLine: v('--grid-line'), regionLine: v('--region-line'), bad: v('--bad'), accent: v('--accent'), bg: v('--bg') };
+  // Parse tile colours to RGB once for the pixel buffer.
+  const probe = document.createElement('canvas').getContext('2d');
+  const rgb = col => { probe.fillStyle = col; const s = probe.fillStyle; return [parseInt(s.slice(1, 3), 16), parseInt(s.slice(3, 5), 16), parseInt(s.slice(5, 7), 16)]; };
+  C.rgb = { [UNK]: rgb(C.unknown), [LIGHT]: rgb(C.light), [DARK]: rgb(C.dark) };
+}
+function applyTheme(name) {
+  if (![...themeSel.options].some(o => o.value === name)) name = 'tavern';
+  document.documentElement.dataset.theme = name;
+  themeSel.value = name;
+  try { localStorage.setItem('pw.theme', name); } catch {}
+  readThemeColours();
+  if (G) { repaintAll(); requestDraw(); }
+}
+themeSel.onchange = () => applyTheme(themeSel.value);
+
+// ============================================================ Game state
+let G = null;            // the giant grid
+let history = [];
+let tapMode = LIGHT, panTool = false, spaceHeld = false;
+let wrongSet = new Set(), hinted = -1, currentRegion = 0;
+const view = { scale: 8, ox: 0, oy: 0 };
+
+// Build the grid from a loaded image.
+function buildGame(img, key, totalTiles, keep) {
+  const aspect = img.naturalWidth / img.naturalHeight;
+  const cols = Math.max(1, Math.round(Math.sqrt(totalTiles * aspect) / REGION));
+  const rows = Math.max(1, Math.round(Math.sqrt(totalTiles / aspect) / REGION));
+  const W = cols * REGION, H = rows * REGION, N = W * H;
+
+  // Downsample the painting to one pixel per tile.
+  const off = document.createElement('canvas'); off.width = W; off.height = H;
+  const octx = off.getContext('2d', { willReadFrequently: true });
+  octx.imageSmoothingEnabled = true; octx.imageSmoothingQuality = 'high';
+  octx.drawImage(img, 0, 0, W, H);
+  const rgb = octx.getImageData(0, 0, W, H).data;
+
+  // Two-tone target: local-contrast threshold so both fine detail and broad tones survive.
+  const lum = new Float32Array(N);
+  let sum = 0;
+  for (let i = 0; i < N; i++) { const l = 0.299 * rgb[i * 4] + 0.587 * rgb[i * 4 + 1] + 0.114 * rgb[i * 4 + 2]; lum[i] = l; sum += l; }
+  const globalMean = sum / N;
+  const R = 4, blur = boxBlur(lum, W, H, R);
+  const target = new Uint8Array(N);
+  for (let i = 0; i < N; i++) target[i] = lum[i] > 0.55 * blur[i] + 0.45 * globalMean ? 1 : 0;
+
+  G = { key, W, H, N, cols, rows, target, rgb, keep,
+        marks: new Uint8Array(N), regions: new Array(cols * rows).fill(null), done: new Uint8Array(cols * rows),
+        pix: new ImageData(W, H), tileCanvas: Object.assign(document.createElement('canvas'), { width: W, height: H }) };
+  loadProgress();
+  for (let r = 0; r < cols * rows; r++) G.done[r] = regionComplete(r) ? 1 : 0;
+  repaintAll();
+  history = []; wrongSet.clear(); hinted = -1;
+  fitView();
+  scheduleIdleGeneration();
+  updateStatus();
+}
+
+function boxBlur(src, W, H, R) {
+  const tmp = new Float32Array(src.length), out = new Float32Array(src.length);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let s = 0, n = 0; for (let k = -R; k <= R; k++) { const xx = x + k; if (xx >= 0 && xx < W) { s += src[y * W + xx]; n++; } }
+    tmp[y * W + x] = s / n;
+  }
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let s = 0, n = 0; for (let k = -R; k <= R; k++) { const yy = y + k; if (yy >= 0 && yy < H) { s += tmp[yy * W + x]; n++; } }
+    out[y * W + x] = s / n;
+  }
+  return out;
+}
+
+// ---------- region helpers ----------
+const regionOf = g => (((g / G.W) | 0) / REGION | 0) * G.cols + ((g % G.W) / REGION | 0);
+const regionOrigin = r => [(r % G.cols) * REGION, ((r / G.cols) | 0) * REGION];   // [x0, y0]
+function regionCells(r) { const [x0, y0] = regionOrigin(r); const out = []; for (let y = 0; y < REGION; y++) for (let x = 0; x < REGION; x++) out.push((y0 + y) * G.W + x0 + x); return out; }
+function localTarget(r) { const t = new Uint8Array(REGION * REGION); regionCells(r).forEach((g, i) => t[i] = G.target[g]); return t; }
+function localMarks(r) { const m = new Uint8Array(REGION * REGION); regionCells(r).forEach((g, i) => m[i] = G.marks[g]); return m; }
+function ensureRegion(r) {
+  if (!G.regions[r]) G.regions[r] = makeRegionClues(localTarget(r), G.keep, mulberry32(hashStr(`${G.key}:${G.W}x${G.H}:${r}`)));
+  return G.regions[r];
+}
+function regionComplete(r) { for (const g of regionCells(r)) if (G.marks[g] === UNK || (G.marks[g] === LIGHT) !== (G.target[g] === 1)) return false; return true; }
+function clueAt(g) {   // clue value at a global cell, or -1 (generates the region if needed)
+  const r = regionOf(g), clues = ensureRegion(r); const [x0, y0] = regionOrigin(r);
+  return clues[(((g / G.W) | 0) - y0) * REGION + (g % G.W - x0)];
+}
+function clueDone(g) {  // every tile in the (region-clipped) 3×3 block is marked
+  const r = regionOf(g), [x0, y0] = regionOrigin(r), lx = g % G.W - x0, ly = ((g / G.W) | 0) - y0;
+  for (const j of NB[ly * REGION + lx]) if (G.marks[(y0 + ((j / REGION) | 0)) * G.W + x0 + j % REGION] === UNK) return false;
+  return true;
+}
+
+// Generate regions in the background so digits appear instantly when you zoom in.
+let idleQueued = false;
+function scheduleIdleGeneration() {
+  if (idleQueued) return; idleQueued = true;
+  const step = deadline => {
+    const g = G; if (!g) { idleQueued = false; return; }
+    while ((deadline.timeRemaining ? deadline.timeRemaining() > 8 : true)) {
+      const r = g.regions.findIndex(x => x === null);
+      if (r < 0) { idleQueued = false; return; }
+      ensureRegion(r);
+      if (!deadline.timeRemaining) break;
+    }
+    (window.requestIdleCallback || (f => setTimeout(() => f({}), 30)))(step);
+  };
+  (window.requestIdleCallback || (f => setTimeout(() => f({}), 30)))(step);
+}
+
+// ---------- pixel buffer (1 px per tile) ----------
+function paintTile(g) {
+  const d = G.pix.data, o = g * 4;
+  if (G.done[regionOf(g)]) { d[o] = G.rgb[o]; d[o + 1] = G.rgb[o + 1]; d[o + 2] = G.rgb[o + 2]; }
+  else { const c = C.rgb[G.marks[g]]; d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; }
+  d[o + 3] = 255;
+}
+function repaintAll() { for (let g = 0; g < G.N; g++) paintTile(g); flushPix(); }
+function repaintRegion(r) { for (const g of regionCells(r)) paintTile(g); flushPix(); }
+function flushPix() { G.tileCanvas.getContext('2d').putImageData(G.pix, 0, 0); }
+
+// ---------- marks / progress ----------
+function setMark(g, v, record = true) {
+  if (!G || G.marks[g] === v) return;
+  const r = regionOf(g);
+  if (G.done[r]) return;                       // completed regions are locked
+  if (record) history.push([g, G.marks[g]]);
+  G.marks[g] = v; wrongSet.delete(g);
+  paintTile(g);
+  if (regionComplete(r)) { G.done[r] = 1; repaintRegion(r); setStatus(`<b>Region ${r + 1} revealed!</b> ${doneCount()} of ${G.cols * G.rows} regions complete`, 'win'); }
+  else flushPix();
+  saveProgressSoon(); requestDraw();
+}
+const doneCount = () => G.done.reduce((s, v) => s + v, 0);
+let saveTimer = null;
+function saveProgressSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(saveProgress, 400); }
+function saveProgress() {
+  try { localStorage.setItem(`pw.save.${G.key}.${G.W}x${G.H}`, btoa(String.fromCharCode(...G.marks))); } catch {}
+}
+function loadProgress() {
+  try {
+    const s = localStorage.getItem(`pw.save.${G.key}.${G.W}x${G.H}`); if (!s) return;
+    const b = atob(s); if (b.length !== G.N) return;
+    for (let i = 0; i < G.N; i++) G.marks[i] = b.charCodeAt(i);
+  } catch {}
+}
+
+// ============================================================ View / rendering
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  requestDraw();
+}
+function fitView() {
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  view.scale = Math.min(w / G.W, h / G.H) * 0.98;
+  view.ox = (w - G.W * view.scale) / 2; view.oy = (h - G.H * view.scale) / 2;
+  requestDraw();
+}
+function minScale() { return Math.min(canvas.clientWidth / G.W, canvas.clientHeight / G.H) * 0.5; }
+function clampView() {
+  const w = canvas.clientWidth, h = canvas.clientHeight, gw = G.W * view.scale, gh = G.H * view.scale;
+  view.ox = gw < w ? (w - gw) / 2 : clamp(view.ox, w - gw - 40, 40);
+  view.oy = gh < h ? (h - gh) / 2 : clamp(view.oy, h - gh - 40, 40);
+}
+function zoomAt(px, py, factor) {
+  const s = clamp(view.scale * factor, minScale(), 64);
+  view.ox = px - (px - view.ox) * (s / view.scale); view.oy = py - (py - view.oy) * (s / view.scale);
+  view.scale = s; clampView(); requestDraw();
+}
+const tileAt = (px, py) => {
+  const x = Math.floor((px - view.ox) / view.scale), y = Math.floor((py - view.oy) / view.scale);
+  return (x < 0 || y < 0 || x >= G.W || y >= G.H) ? -1 : y * G.W + x;
+};
+
+let drawQueued = false;
+function requestDraw() { if (!drawQueued) { drawQueued = true; requestAnimationFrame(draw); } }
+function draw() {
+  drawQueued = false;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, w, h);
+  if (!G) return;
+  const s = view.scale;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(G.tileCanvas, view.ox, view.oy, G.W * s, G.H * s);
+
+  const x0 = clamp(Math.floor(-view.ox / s), 0, G.W - 1), y0 = clamp(Math.floor(-view.oy / s), 0, G.H - 1);
+  const x1 = clamp(Math.ceil((w - view.ox) / s), 0, G.W), y1 = clamp(Math.ceil((h - view.oy) / s), 0, G.H);
+  const sx = x => view.ox + x * s, sy = y => view.oy + y * s;
+
+  if (s >= 8) {   // tile grid lines
+    ctx.strokeStyle = C.gridLine; ctx.lineWidth = 1; ctx.beginPath();
+    for (let x = x0; x <= x1; x++) { const X = Math.round(sx(x)) + .5; ctx.moveTo(X, sy(y0)); ctx.lineTo(X, sy(y1)); }
+    for (let y = y0; y <= y1; y++) { const Y = Math.round(sy(y)) + .5; ctx.moveTo(sx(x0), Y); ctx.lineTo(sx(x1), Y); }
+    ctx.stroke();
+  }
+  if (s >= 2.5) {  // region borders
+    ctx.strokeStyle = C.regionLine; ctx.lineWidth = s >= 10 ? 2 : 1; ctx.beginPath();
+    for (let x = Math.ceil(x0 / REGION) * REGION; x <= x1; x += REGION) { ctx.moveTo(sx(x), sy(y0)); ctx.lineTo(sx(x), sy(y1)); }
+    for (let y = Math.ceil(y0 / REGION) * REGION; y <= y1; y += REGION) { ctx.moveTo(sx(x0), sy(y)); ctx.lineTo(sx(x1), sy(y)); }
+    ctx.stroke();
+  }
+  if (s >= 12) {   // digits and X marks
+    ctx.font = `bold ${Math.round(s * 0.58)}px Georgia, serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+      const g = y * G.W + x, r = regionOf(g);
+      if (G.done[r]) continue;
+      const m = G.marks[g], cx = sx(x + .5), cy = sy(y + .5);
+      if (m === DARK) { ctx.strokeStyle = C.xmark; ctx.lineWidth = Math.max(1, s * 0.08); const k = s * 0.2; ctx.beginPath(); ctx.moveTo(cx - k, cy - k); ctx.lineTo(cx + k, cy + k); ctx.moveTo(cx + k, cy - k); ctx.lineTo(cx - k, cy + k); ctx.stroke(); }
+      const v = clueAt(g);
+      if (v >= 0) {
+        if (m === DARK) { ctx.fillStyle = C.dark; ctx.fillRect(cx - s * 0.25, cy - s * 0.25, s * 0.5, s * 0.5); }   // clear the X behind the digit
+        ctx.fillStyle = (clueDone(g) ? C.clueDone : C.clue)[m]; ctx.fillText(v, cx, cy + s * 0.03);
+      }
+    }
+  }
+  if (s >= 4) {
+    ctx.lineWidth = Math.max(2, s * 0.15); ctx.strokeStyle = C.bad;
+    for (const g of wrongSet) ctx.strokeRect(sx(g % G.W) + 1, sy((g / G.W) | 0) + 1, s - 2, s - 2);
+    if (hinted >= 0) { ctx.strokeStyle = C.accent; ctx.strokeRect(sx(hinted % G.W) + 1, sy((hinted / G.W) | 0) + 1, s - 2, s - 2); }
+    // current region outline
+    const [rx, ry] = regionOrigin(currentRegion);
+    ctx.strokeStyle = C.accent; ctx.lineWidth = 2; ctx.globalAlpha = .9;
+    ctx.strokeRect(sx(rx), sy(ry), REGION * s, REGION * s); ctx.globalAlpha = 1;
+  }
+  drawMinimap();
+}
+function drawMinimap() {
+  const mw = 180, mh = Math.max(20, Math.round(mw * G.H / G.W));
+  if (mini.width !== mw || mini.height !== mh) { mini.width = mw; mini.height = mh; }
+  mctx.imageSmoothingEnabled = false;
+  mctx.drawImage(G.tileCanvas, 0, 0, mw, mh);
+  const k = mw / G.W;
+  mctx.strokeStyle = C.accent; mctx.lineWidth = 1.5;
+  mctx.strokeRect(-view.ox / view.scale * k, -view.oy / view.scale * k, canvas.clientWidth / view.scale * k, canvas.clientHeight / view.scale * k);
+}
+$('minimap').addEventListener('pointerdown', e => {
+  const b = mini.getBoundingClientRect(); const tx = (e.clientX - b.left) / b.width * G.W, ty = (e.clientY - b.top) / b.height * G.H;
+  view.ox = canvas.clientWidth / 2 - tx * view.scale; view.oy = canvas.clientHeight / 2 - ty * view.scale; clampView(); requestDraw();
+});
+
+function updateStatus() {
+  if (!G) return;
+  const marked = G.marks.reduce((s, v) => s + (v !== UNK), 0);
+  setStatus(`<b>${G.W}×${G.H}</b> = ${G.N.toLocaleString()} tiles · region <b>${currentRegion + 1}</b>/${G.cols * G.rows} · <b>${doneCount()}</b> regions revealed · ${(100 * marked / G.N).toFixed(1)}% marked`);
+}
+
+// ============================================================ Input
+const pointers = new Map();
+let drag = null;    // { kind: 'pan'|'paint', value, lastX, lastY } | pinch data
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('wheel', e => { e.preventDefault(); if (G) zoomAt(e.offsetX, e.offsetY, Math.pow(1.0015, -e.deltaY)); }, { passive: false });
+
+canvas.addEventListener('pointerdown', e => {
+  if (!G) return;
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
+  if (pointers.size === 2) {   // pinch: cancel painting, start pinch-pan-zoom
+    const [a, b] = [...pointers.values()];
+    drag = { kind: 'pinch', dist: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
+    return;
+  }
+  const g = tileAt(e.offsetX, e.offsetY);
+  const wantPan = e.button === 1 || panTool || spaceHeld || (e.pointerType === 'touch' && g < 0);
+  if (wantPan || g < 0) { drag = { kind: 'pan', lastX: e.offsetX, lastY: e.offsetY }; return; }
+  currentRegion = regionOf(g);
+  const paint = e.button === 2 ? DARK : tapMode;
+  drag = { kind: 'paint', value: G.marks[g] === paint ? UNK : paint };
+  setMark(g, drag.value); updateStatus();
+});
+canvas.addEventListener('pointermove', e => {
+  if (!G || !drag) return;
+  const p = pointers.get(e.pointerId); if (p) { p.x = e.offsetX; p.y = e.offsetY; }
+  if (drag.kind === 'pinch' && pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    const dist = Math.hypot(a.x - b.x, a.y - b.y), cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+    view.ox += cx - drag.cx; view.oy += cy - drag.cy;
+    zoomAt(cx, cy, dist / drag.dist);
+    Object.assign(drag, { dist, cx, cy });
+  } else if (drag.kind === 'pan') {
+    view.ox += e.offsetX - drag.lastX; view.oy += e.offsetY - drag.lastY; drag.lastX = e.offsetX; drag.lastY = e.offsetY;
+    clampView(); requestDraw();
+  } else if (drag.kind === 'paint') {
+    const g = tileAt(e.offsetX, e.offsetY);
+    if (g >= 0 && regionOf(g) === currentRegion) setMark(g, drag.value);
+  }
+});
+const endPointer = e => { pointers.delete(e.pointerId); if (pointers.size === 0) { drag = null; updateStatus(); } else if (pointers.size === 1) drag = { kind: 'pan', lastX: [...pointers.values()][0].x, lastY: [...pointers.values()][0].y }; };
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+window.addEventListener('blur', () => { pointers.clear(); drag = null; spaceHeld = false; canvas.classList.toggle('panning', panTool); });
+
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+  if (e.code === 'Space') { spaceHeld = true; canvas.classList.add('panning'); e.preventDefault(); }
+  if (e.key === 'z' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); undo(); }
+  if (e.key === 'x') modeBtn.click();
+  if (e.key === 'm') $('musicBtn').click();
+  if (e.key === 'f') fitView();
+  if (e.key === '?') $('helpBtn').click();
+  if (e.key === '+' || e.key === '=') zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, 1.25);
+  if (e.key === '-') zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, 0.8);
+  const step = 80;
+  if (e.key === 'ArrowLeft') { view.ox += step; clampView(); requestDraw(); }
+  if (e.key === 'ArrowRight') { view.ox -= step; clampView(); requestDraw(); }
+  if (e.key === 'ArrowUp') { view.oy += step; clampView(); requestDraw(); }
+  if (e.key === 'ArrowDown') { view.oy -= step; clampView(); requestDraw(); }
+});
+document.addEventListener('keyup', e => { if (e.code === 'Space') { spaceHeld = false; canvas.classList.toggle('panning', panTool); } });
+
+// ============================================================ Buttons
+function undo() {
+  if (!history.length) return;
+  const [g, prev] = history.pop();
+  if (G.done[regionOf(g)]) return;   // don't un-reveal a finished region
+  setMark(g, prev, false); updateStatus();
+}
+$('undoBtn').onclick = undo;
+panBtn.onclick = () => { panTool = !panTool; panBtn.classList.toggle('active', panTool); canvas.classList.toggle('panning', panTool); };
+$('fitBtn').onclick = fitView;
+modeBtn.onclick = () => { tapMode = tapMode === LIGHT ? DARK : LIGHT; modeBtn.textContent = tapMode === LIGHT ? 'Tap: ☀ light' : 'Tap: ✕ dark'; };
+$('helpBtn').onclick = () => { $('help').hidden = !$('help').hidden; };
+$('clearBtn').onclick = () => {
+  if (!G || G.done[currentRegion]) return;
+  for (const g of regionCells(currentRegion)) setMark(g, UNK);
+  wrongSet.clear(); updateStatus();
+};
+$('resetBtn').onclick = () => {
+  if (!G) return;
+  G.marks.fill(UNK); G.done.fill(0); history = []; wrongSet.clear(); hinted = -1;
+  try { localStorage.removeItem(`pw.save.${G.key}.${G.W}x${G.H}`); } catch {}
+  repaintAll(); requestDraw(); updateStatus();
+};
+$('checkBtn').onclick = () => {
+  if (!G) return;
+  wrongSet.clear();
+  for (const g of regionCells(currentRegion)) if (G.marks[g] !== UNK && (G.marks[g] === LIGHT) !== (G.target[g] === 1)) wrongSet.add(g);
+  setStatus(wrongSet.size ? `<b>${wrongSet.size} mistake${wrongSet.size > 1 ? 's' : ''}</b> highlighted in region ${currentRegion + 1}` : `<b>No mistakes</b> in region ${currentRegion + 1} so far`, wrongSet.size ? 'bad' : '');
+  requestDraw();
+};
+$('hintBtn').onclick = () => {
+  if (!G || G.done[currentRegion]) return;
+  const r = currentRegion, clues = ensureRegion(r), cellsG = regionCells(r);
+  const base = localMarks(r), t = localTarget(r);
+  for (let i = 0; i < base.length; i++) if (base[i] !== UNK && (base[i] === LIGHT) !== (t[i] === 1)) base[i] = UNK;   // ignore wrong marks
+  const { state } = solve(REGION, REGION, NB, clues, base, 1);
+  for (let i = 0; i < state.length; i++) if (state[i] !== UNK && G.marks[cellsG[i]] !== state[i]) {
+    setMark(cellsG[i], state[i]); hinted = cellsG[i]; setStatus(`<b>Hint:</b> one tile deduced in region ${r + 1}`); requestDraw(); return;
+  }
+  setStatus('<b>No safe deduction</b> — fix a mistake first (try Check)', 'bad');
+};
+
+// ============================================================ Loading pictures
+let currentKey = null;
+function loadSelected() {
+  const key = imageSel.value;
+  if (key === 'custom') { fileInput.click(); return; }
+  const im = IMAGES.find(i => i.key === key);
+  $('artCredit').innerHTML = `<a href="${im.page}" target="_blank" rel="noopener">${im.name}</a> — ${im.credit}`;
+  loadImage(im.url, key);
+}
+function loadImage(src, key) {
+  loadingEl.hidden = false; loadingEl.textContent = 'Loading picture…'; G = null; requestDraw();
+  const img = new Image(); img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    try { buildGame(img, key, +sizeSel.value, +densitySel.value); loadingEl.hidden = true; currentKey = key; }
+    catch (e) { loadingEl.textContent = 'Could not read that picture (' + e.message + ')'; }
+  };
+  img.onerror = () => { loadingEl.textContent = 'Could not load the picture — check your connection and try again.'; };
+  img.src = src;
+}
+fileInput.onchange = () => {
+  const f = fileInput.files[0]; if (!f) { imageSel.value = currentKey || IMAGES[0].key; return; }
+  const key = 'custom:' + hashStr(f.name + ':' + f.size);
+  $('artCredit').textContent = f.name;
+  loadImage(URL.createObjectURL(f), key);
+  fileInput.value = '';
+};
+imageSel.onchange = loadSelected;
+sizeSel.onchange = densitySel.onchange = () => { if (imageSel.value === 'custom') { setStatus('Re-pick your image to apply the new setting'); return; } loadSelected(); };
+
+// ============================================================ Background music (Wikimedia Commons; PD / CC)
+const TRACKS = [
+  { title: 'Gymnopédie No. 1 — Erik Satie', by: 'Kevin MacLeod · CC BY 3.0',
+    page: 'https://commons.wikimedia.org/wiki/File:Gymnopedie_No._1_(ISRC_USUAN1100787).mp3',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/2/2a/Gymnopedie_No._1_%28ISRC_USUAN1100787%29.mp3' },
+  { title: 'Gnossienne No. 1 — Erik Satie', by: 'La Pianista · public domain',
+    page: 'https://commons.wikimedia.org/wiki/File:Satie_-_Gnossienne_1.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/9/91/Satie_-_Gnossienne_1.ogg' },
+  { title: 'Nocturne in C♯ minor, Op. posth. — Frédéric Chopin', by: 'CC BY 3.0',
+    page: 'https://commons.wikimedia.org/wiki/File:Chopin,_Nocturne_in_C-sharp_minor,_Op._Posth.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/1/12/Chopin%2C_Nocturne_in_C-sharp_minor%2C_Op._Posth.ogg' },
+  { title: 'Clair de lune — Claude Debussy', by: 'public domain',
+    page: 'https://commons.wikimedia.org/wiki/File:Clair_de_lune_(Claude_Debussy)_Suite_bergamasque.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/b/be/Clair_de_lune_%28Claude_Debussy%29_Suite_bergamasque.ogg' },
+  { title: 'Cello Suite No. 1, Prélude — J. S. Bach', by: 'public domain',
+    page: 'https://commons.wikimedia.org/wiki/File:Bach_-_Cello_Suite_no._1_in_G_major,_BWV_1007_-_I._Pr%C3%A9lude.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/9/9d/Bach_-_Cello_Suite_no._1_in_G_major%2C_BWV_1007_-_I._Pr%C3%A9lude.ogg' },
+  { title: 'Violin Sonata No. 1, Adagio — J. S. Bach', by: 'CC0',
+    page: 'https://commons.wikimedia.org/wiki/File:J._S._Bach_%E2%80%93_Violin_Sonata_No.1_in_G_minor,_BWV_1001,_I._Adagio.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/8/8f/J._S._Bach_%E2%80%93_Violin_Sonata_No.1_in_G_minor%2C_BWV_1001%2C_I._Adagio.ogg' },
+  { title: 'Recuerdos de la Alhambra — Francisco Tárrega', by: 'Carlo Alberto Boni · CC BY-SA 3.0',
+    page: 'https://commons.wikimedia.org/wiki/File:Recuerdos_de_la_Alhambra.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/a/a3/Recuerdos_de_la_Alhambra.ogg' },
+  { title: 'Canon in D (guitar) — Johann Pachelbel', by: 'Aitua · CC BY-SA 4.0',
+    page: 'https://commons.wikimedia.org/wiki/File:Pachelbel_-_Canon_in_D_major,_P._37_(Guitar).ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/a/ae/Pachelbel_-_Canon_in_D_major%2C_P._37_%28Guitar%29.ogg' },
+  { title: 'Balletto “Il conte Orlando” — Respighi after Molinaro (1599)', by: 'US Marine Band · public domain',
+    page: 'https://commons.wikimedia.org/wiki/File:Balletto_detto_Il_conte_Orlando.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/1/17/Balletto_detto_Il_conte_Orlando.ogg' },
+  { title: 'Lute piece from Bosch’s “Garden of Earthly Delights”', by: 'panimetal7 · CC BY 3.0',
+    page: 'https://commons.wikimedia.org/wiki/File:Butt_Music_-_Hieronymus_Bosch_(Lute).opus',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/3/32/Butt_Music_-_Hieronymus_Bosch_%28Lute%29.opus' },
+];
+$('credits').innerHTML = TRACKS.map(t => `<a href="${t.page}" target="_blank" rel="noopener">${t.title.split(' — ')[0]}</a> (${t.by})`).join(' · ');
+
+const audio = new Audio(); audio.preload = 'none';
+const musicBtn = $('musicBtn'), nextBtn = $('nextBtn'), volumeEl = $('volume'), nowEl = $('nowPlaying');
+let trackIdx = Math.floor(Math.random() * TRACKS.length), musicWanted = false;
+try { const v = localStorage.getItem('pw.volume'); if (v !== null) volumeEl.value = v; } catch {}
+audio.volume = +volumeEl.value;
+function loadTrack(i) {
+  trackIdx = (i + TRACKS.length) % TRACKS.length; const t = TRACKS[trackIdx];
+  audio.src = t.src; nowEl.innerHTML = `♪ <a href="${t.page}" target="_blank" rel="noopener">${t.title}</a> — ${t.by}`;
+}
+function updateMusicBtn() { musicBtn.textContent = (!audio.paused && !audio.ended) ? '♪ Pause' : '♪ Play'; }
+async function playMusic() {
+  musicWanted = true; if (!audio.src) loadTrack(trackIdx);
+  try { await audio.play(); } catch (e) { if (e.name === 'NotAllowedError') nowEl.textContent = 'Music blocked by the browser — click ♪ Play to start it.'; }
+  updateMusicBtn();
+}
+function pauseMusic() { musicWanted = false; audio.pause(); updateMusicBtn(); }
+musicBtn.onclick = () => (audio.paused ? playMusic() : pauseMusic());
+nextBtn.onclick = () => { loadTrack(trackIdx + 1); if (musicWanted) playMusic(); };
+volumeEl.oninput = () => { audio.volume = +volumeEl.value; try { localStorage.setItem('pw.volume', volumeEl.value); } catch {} };
+audio.addEventListener('ended', () => { loadTrack(trackIdx + 1); if (musicWanted) playMusic(); });
+audio.addEventListener('error', () => { nowEl.textContent = `Couldn't load “${TRACKS[trackIdx].title}” — skipping.`; if (musicWanted) setTimeout(() => nextBtn.onclick(), 1500); });
+audio.addEventListener('play', updateMusicBtn); audio.addEventListener('pause', updateMusicBtn);
+const setLoading = on => nowEl.classList.toggle('loading', on);
+audio.addEventListener('waiting', () => setLoading(true)); audio.addEventListener('loadstart', () => setLoading(true));
+audio.addEventListener('playing', () => setLoading(false)); audio.addEventListener('pause', () => setLoading(false));
+canvas.addEventListener('pointerdown', () => { if (!audio.src) playMusic(); }, { once: true });
+
+// ============================================================ Boot
+{ let saved = null; try { saved = localStorage.getItem('pw.theme'); } catch {} applyTheme(saved || 'tavern'); }
+window.addEventListener('resize', resize);
+resize();
+loadSelected();
+</script>
+</body>
+</html>
