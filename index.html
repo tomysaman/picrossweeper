@@ -174,11 +174,12 @@
       <option value="25">25 × 25</option>
     </select>
   </label>
-  <label>Clues
-    <select id="density">
-      <option value="0.8">Generous</option>
-      <option value="0.45" selected>Normal</option>
-      <option value="0">Minimal</option>
+  <label>Difficulty
+    <select id="difficulty" title="Harder levels keep fewer redundant clues and avoid trivial 0/9 clues">
+      <option value="relaxed">Relaxed</option>
+      <option value="normal" selected>Normal</option>
+      <option value="hard">Hard</option>
+      <option value="expert">Expert</option>
     </select>
   </label>
   <button id="newBtn" class="primary">New puzzle</button>
@@ -379,52 +380,49 @@ function solve(n, nb, clues, initial, maxSteps = Infinity) {
   const state = initial ? Uint8Array.from(initial) : new Uint8Array(n * n);
   const clueCells = [];
   for (let i = 0; i < n * n; i++) if (clues[i] >= 0) clueCells.push(i);
-  // Only clues within Chebyshev distance ≤ 2 can share neighborhood cells.
-  const near = new Map();
-  for (const a of clueCells) {
-    const ra = (a / n) | 0, ca = a % n, list = [];
-    for (const b of clueCells) if (b !== a && Math.abs(((b / n) | 0) - ra) <= 2 && Math.abs(b % n - ca) <= 2) list.push(b);
-    near.set(a, list);
-  }
 
-  const info = i => {
-    let lit = 0; const unk = [];
-    for (const j of nb[i]) { if (state[j] === LIGHT) lit++; else if (state[j] === UNK) unk.push(j); }
-    return { need: clues[i] - lit, unk };
-  };
-
-  let steps = 0;
-  let changed = true;
-  while (changed && steps < maxSteps) {
-    changed = false;
-    // Rule 1: a clue's unknown neighbors are all light or all dark.
-    for (const i of clueCells) {
-      const { need, unk } = info(i);
-      if (!unk.length) continue;
-      if (need === 0) { for (const j of unk) state[j] = DARK; changed = true; steps++; }
-      else if (need === unk.length) { for (const j of unk) state[j] = LIGHT; changed = true; steps++; }
-      if (steps >= maxSteps) return { state, solved: false };
-    }
-    if (changed) continue;
-    // Rule 2: subset reasoning between two clues whose neighborhoods overlap.
-    for (const a of clueCells) {
-      const A = info(a);
-      if (!A.unk.length) continue;
-      const setA = new Set(A.unk);
-      for (const b of near.get(a)) {
-        const B = info(b);
-        if (B.unk.length <= A.unk.length) continue;
-        let subset = true;
-        for (const j of A.unk) if (!B.unk.includes(j)) { subset = false; break; }
-        if (!subset) continue;
-        const diff = B.unk.filter(j => !setA.has(j));
-        const needDiff = B.need - A.need;
-        if (needDiff === 0) { for (const j of diff) state[j] = DARK; changed = true; steps++; }
-        else if (needDiff === diff.length) { for (const j of diff) state[j] = LIGHT; changed = true; steps++; }
-        if (changed) break;
+  // Event-driven propagation: a clue is (re)examined only when it starts, or when a tile in its
+  // block changes, so the work is proportional to the deductions made rather than passes × clues.
+  const total = n * n;
+  // Cells whose blocks overlap cell i (distance ≤ 2) — static per neighbourhood table, so cached on it.
+  const nb2 = nb._nb2 || (nb._nb2 = nb.map((list, i) => { const s = new Set(); for (const j of list) for (const k of nb[j]) if (k !== i) s.add(k); return [...s]; }));
+  const queue = [...clueCells]; const queued = new Uint8Array(total); for (const a of queue) queued[a] = 1;
+  const inA = new Uint8Array(total), inB = new Uint8Array(total);   // scratch masks for the subset tests
+  let unkA = [], unkB = [], steps = 0, head = 0;
+  // Setting a cell re-queues every clue whose block contains it (adjacency is symmetric: those are nb[c]).
+  const setCell = (c, v) => { state[c] = v; for (const t of nb[c]) if (clues[t] >= 0 && !queued[t]) { queued[t] = 1; queue.push(t); } };
+  const gather = (i, out) => { let lit = 0; out.length = 0; for (const j of nb[i]) { if (state[j] === LIGHT) lit++; else if (state[j] === UNK) out.push(j); } return clues[i] - lit; };
+  while (head < queue.length && steps < maxSteps) {
+    const a = queue[head++]; queued[a] = 0;
+    const needA = gather(a, unkA);
+    if (!unkA.length) continue;
+    // Rule 1: a clue's unknown neighbours are all light or all dark.
+    if (needA === 0) { for (const j of unkA) setCell(j, DARK); steps++; continue; }
+    if (needA === unkA.length) { for (const j of unkA) setCell(j, LIGHT); steps++; continue; }
+    // Rule 2: subset reasoning against clues whose blocks overlap, in both directions.
+    for (const j of unkA) inA[j] = 1;
+    let done = false;
+    for (const b of nb2[a]) {
+      if (clues[b] < 0) continue;
+      const needB = gather(b, unkB);
+      if (!unkB.length || unkB.length === unkA.length) continue;
+      let shared = 0; for (const j of unkB) if (inA[j]) shared++;
+      if (shared === unkA.length) {              // A ⊂ B: the tiles only B sees must supply the difference
+        const needDiff = needB - needA, diffLen = unkB.length - unkA.length;
+        if (needDiff === 0) { for (const j of unkB) if (!inA[j]) setCell(j, DARK); done = true; }
+        else if (needDiff === diffLen) { for (const j of unkB) if (!inA[j]) setCell(j, LIGHT); done = true; }
+      } else if (shared === unkB.length) {       // B ⊂ A: symmetric case
+        const needDiff = needA - needB, diffLen = unkA.length - unkB.length;
+        if (needDiff === 0 || needDiff === diffLen) {
+          for (const j of unkB) inB[j] = 1;
+          for (const j of unkA) if (!inB[j]) setCell(j, needDiff === 0 ? DARK : LIGHT);
+          for (const j of unkB) inB[j] = 0;
+          done = true;
+        }
       }
-      if (changed) break;
+      if (done) { steps++; break; }
     }
+    for (const j of unkA) inA[j] = 0;
   }
   let solved = true;
   for (let i = 0; i < state.length; i++) if (state[i] === UNK) { solved = false; break; }
@@ -432,19 +430,35 @@ function solve(n, nb, clues, initial, maxSteps = Infinity) {
 }
 
 // ---------- Puzzle generation ----------
-// `keep` = probability a redundant clue survives pruning (0 → minimal puzzle, higher → easier).
-function makePuzzle(n, target, keep = 0.25) {
+// Difficulty presets: keep = chance a redundant clue survives pruning; avoidExtremes = prefer
+// informative 1–8 clues when placing and prune trivial 0/9 ("all dark"/"all light") clues first.
+const DIFFICULTY = {
+  relaxed: { keep: 0.8,  avoidExtremes: false },
+  normal:  { keep: 0.45, avoidExtremes: true },
+  hard:    { keep: 0.15, avoidExtremes: true },
+  expert:  { keep: 0,    avoidExtremes: true },
+};
+
+function makePuzzle(n, target, diffName = 'normal') {
+  const { keep, avoidExtremes } = DIFFICULTY[diffName] || DIFFICULTY.normal;
   const nb = neighborsOf(n);
   const total = n * n;
   const count = i => { let s = 0; for (const j of nb[i]) s += target[j]; return s; };
+  const trivial = i => { const c = count(i); return c === 0 || c === nb[i].length; };
+  const choose = (list, k = 1) => {   // prefer informative clues when asked; fall back to anything
+    if (avoidExtremes) { const good = list.filter(i => !trivial(i)); if (good.length >= k) list = good; }
+    return list.slice(0, k);
+  };
   const clues = new Int8Array(total).fill(-1);
 
   // Seed with random clues.
-  for (const i of shuffle([...Array(total).keys()]).slice(0, Math.round(total * 0.18))) clues[i] = count(i);
+  for (const i of choose(shuffle([...Array(total).keys()]), Math.round(total * 0.18))) clues[i] = count(i);
 
-  // Add clues until the solver can finish without guessing.
+  // Add clues until the solver can finish without guessing. Deductions only grow as clues are
+  // added, so each solve continues from the previous state instead of starting over.
+  let prev = null;
   for (;;) {
-    const { state, solved } = solve(n, nb, clues);
+    const { state, solved } = solve(n, nb, clues, prev); prev = state;
     if (solved) break;
     // Candidate spots for a new clue: any non-clue cell whose 3×3 block touches an unknown cell.
     // (Unknown cells may themselves already be clues — e.g. two adjacent clue tiles that only know
@@ -454,15 +468,17 @@ function makePuzzle(n, target, keep = 0.25) {
     const list = [...cand];
     // Prefer unknown cells that touch the solved frontier — gives the most local leverage.
     const frontier = list.filter(i => state[i] === UNK && nb[i].some(j => state[j] !== UNK));
-    const pool = frontier.length ? frontier : list;
-    const pick = pool[rnd(pool.length)];
+    const pool = shuffle(frontier.length ? frontier : list);
+    const pick = choose(pool)[0];
     clues[pick] = count(pick);
   }
 
   // Prune: drop any clue that isn't needed to keep the puzzle solvable.
-  const order = shuffle([...Array(total).keys()].filter(i => clues[i] >= 0));
+  // Trivial 0/9 clues are tried first so they only survive when truly needed.
+  let order = shuffle([...Array(total).keys()].filter(i => clues[i] >= 0));
+  if (avoidExtremes) order = [...order.filter(trivial), ...order.filter(i => !trivial(i))];
   for (const i of order) {
-    if (Math.random() < keep) continue;
+    if (Math.random() < keep && !(avoidExtremes && trivial(i))) continue;
     const v = clues[i]; clues[i] = -1;
     if (!solve(n, nb, clues).solved) clues[i] = v;
   }
@@ -474,7 +490,7 @@ const boardEl = document.getElementById('board');
 const statusEl = document.getElementById('status');
 const patternSel = document.getElementById('pattern');
 const sizeSel = document.getElementById('size');
-const densitySel = document.getElementById('density');
+const difficultySel = document.getElementById('difficulty');
 const modeBtn = document.getElementById('modeBtn');
 
 for (const name of ['Random', ...Object.keys(ART)]) {
@@ -489,7 +505,7 @@ function newGame() {
   const n = +sizeSel.value;
   const name = patternSel.value;
   const t0 = performance.now();
-  puzzle = makePuzzle(n, makeTarget(n, name), +densitySel.value);
+  puzzle = makePuzzle(n, makeTarget(n, name), difficultySel.value);
   marks = new Uint8Array(n * n);
   history = []; won = false;
   const clueCount = puzzle.clues.reduce((s, v) => s + (v >= 0), 0);
@@ -580,7 +596,7 @@ window.addEventListener('blur', endDrag);
 
 // ---------- Buttons ----------
 document.getElementById('newBtn').onclick = newGame;
-patternSel.onchange = sizeSel.onchange = densitySel.onchange = newGame;
+patternSel.onchange = sizeSel.onchange = difficultySel.onchange = newGame;
 
 document.getElementById('undoBtn').onclick = () => {
   if (won || !history.length) return;

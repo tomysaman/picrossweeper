@@ -136,11 +136,12 @@
       <option value="54000" selected>Giant · ~54k</option>
     </select>
   </label>
-  <label>Clues
-    <select id="density">
-      <option value="0.8">Generous</option>
-      <option value="0.45" selected>Normal</option>
-      <option value="0">Minimal</option>
+  <label>Difficulty
+    <select id="difficulty" title="Harder levels keep fewer redundant clues, avoid trivial 0/9 clues, and add texture to the two-tone pattern">
+      <option value="relaxed">Relaxed</option>
+      <option value="normal" selected>Normal</option>
+      <option value="hard">Hard</option>
+      <option value="expert">Expert</option>
     </select>
   </label>
   <span class="group">
@@ -283,67 +284,86 @@ function regionNeighbors(cells, W, rid, r, localIdx) {
 }
 
 // Constraint-propagation solver: single-clue rule + pairwise subset rule. Never guesses.
+// Event-driven: a clue is (re)examined only when it starts, or when a tile in its block changes,
+// so the work is proportional to the deductions made rather than passes × clues.
 function solve(nb, clues, initial, maxSteps = Infinity) {
   const total = nb.length;
   const state = initial ? Uint8Array.from(initial) : new Uint8Array(total);
-  const clueCells = [];
-  for (let i = 0; i < total; i++) if (clues[i] >= 0) clueCells.push(i);
-  // Clues whose neighbourhoods overlap are the only pairs the subset rule can use.
-  const touching = new Array(total); for (let i = 0; i < total; i++) touching[i] = [];
-  for (const a of clueCells) for (const j of nb[a]) touching[j].push(a);
-  const near = new Map();
-  for (const a of clueCells) { const s = new Set(); for (const j of nb[a]) for (const b of touching[j]) if (b !== a) s.add(b); near.set(a, [...s]); }
-  const info = i => {
-    let lit = 0; const unk = [];
-    for (const j of nb[i]) { if (state[j] === LIGHT) lit++; else if (state[j] === UNK) unk.push(j); }
-    return { need: clues[i] - lit, unk };
-  };
-  let steps = 0, changed = true;
-  while (changed && steps < maxSteps) {
-    changed = false;
-    for (const i of clueCells) {
-      const { need, unk } = info(i);
-      if (!unk.length) continue;
-      if (need === 0) { for (const j of unk) state[j] = DARK; changed = true; steps++; }
-      else if (need === unk.length) { for (const j of unk) state[j] = LIGHT; changed = true; steps++; }
-      if (steps >= maxSteps) return { state, solved: false };
-    }
-    if (changed) continue;
-    outer: for (const a of clueCells) {
-      const A = info(a);
-      if (!A.unk.length) continue;
-      const setA = new Set(A.unk);
-      for (const b of near.get(a)) {
-        const B = info(b);
-        if (B.unk.length <= A.unk.length) continue;
-        let subset = true;
-        for (const j of A.unk) if (!B.unk.includes(j)) { subset = false; break; }
-        if (!subset) continue;
-        const diff = B.unk.filter(j => !setA.has(j));
-        const needDiff = B.need - A.need;
-        if (needDiff === 0) { for (const j of diff) state[j] = DARK; changed = true; steps++; break outer; }
-        if (needDiff === diff.length) { for (const j of diff) state[j] = LIGHT; changed = true; steps++; break outer; }
+  // Cells whose blocks overlap cell i (distance ≤ 2) — static per neighbourhood table, so cached on it.
+  const nb2 = nb._nb2 || (nb._nb2 = nb.map((list, i) => { const s = new Set(); for (const j of list) for (const k of nb[j]) if (k !== i) s.add(k); return [...s]; }));
+  const queue = [], queued = new Uint8Array(total);
+  for (let i = 0; i < total; i++) if (clues[i] >= 0) { queue.push(i); queued[i] = 1; }
+  const inA = new Uint8Array(total), inB = new Uint8Array(total);   // scratch masks for the subset tests
+  let unkA = [], unkB = [], steps = 0, head = 0;
+  // Setting a cell re-queues every clue whose block contains it (adjacency is symmetric: those are nb[c]).
+  const setCell = (c, v) => { state[c] = v; for (const t of nb[c]) if (clues[t] >= 0 && !queued[t]) { queued[t] = 1; queue.push(t); } };
+  const gather = (i, out) => { let lit = 0; out.length = 0; for (const j of nb[i]) { if (state[j] === LIGHT) lit++; else if (state[j] === UNK) out.push(j); } return clues[i] - lit; };
+  while (head < queue.length && steps < maxSteps) {
+    const a = queue[head++]; queued[a] = 0;
+    const needA = gather(a, unkA);
+    if (!unkA.length) continue;
+    if (needA === 0) { for (const j of unkA) setCell(j, DARK); steps++; continue; }
+    if (needA === unkA.length) { for (const j of unkA) setCell(j, LIGHT); steps++; continue; }
+    for (const j of unkA) inA[j] = 1;
+    let done = false;
+    for (const b of nb2[a]) {
+      if (clues[b] < 0) continue;
+      const needB = gather(b, unkB);
+      if (!unkB.length || unkB.length === unkA.length) continue;
+      let shared = 0; for (const j of unkB) if (inA[j]) shared++;
+      if (shared === unkA.length) {              // A ⊂ B: the tiles only B sees must supply the difference
+        const needDiff = needB - needA, diffLen = unkB.length - unkA.length;
+        if (needDiff === 0) { for (const j of unkB) if (!inA[j]) setCell(j, DARK); done = true; }
+        else if (needDiff === diffLen) { for (const j of unkB) if (!inA[j]) setCell(j, LIGHT); done = true; }
+      } else if (shared === unkB.length) {       // B ⊂ A: symmetric case
+        const needDiff = needA - needB, diffLen = unkA.length - unkB.length;
+        if (needDiff === 0 || needDiff === diffLen) {
+          for (const j of unkB) inB[j] = 1;
+          for (const j of unkA) if (!inB[j]) setCell(j, needDiff === 0 ? DARK : LIGHT);
+          for (const j of unkB) inB[j] = 0;
+          done = true;
+        }
       }
+      if (done) { steps++; break; }
     }
+    for (const j of unkA) inA[j] = 0;
   }
   let solved = true;
-  for (let i = 0; i < state.length; i++) if (state[i] === UNK) { solved = false; break; }
+  for (let i = 0; i < total; i++) if (state[i] === UNK) { solved = false; break; }
   return { state, solved };
 }
+
+// Difficulty presets. keep = chance a redundant clue survives pruning; R = blur radius of the local-contrast
+// threshold; texture = strength of error-diffusion dithering (0 = plain threshold, 1 = full halftone), which
+// breaks flat areas into detail so far fewer clues are trivial 0/9s; avoidExtremes = prefer informative
+// 1–8 clues when placing, and prune 0/9 clues first.
+const DIFFICULTY = {
+  relaxed: { keep: 0.8,  R: 4, texture: 0,    avoidExtremes: false },
+  normal:  { keep: 0.45, R: 4, texture: 0.25, avoidExtremes: true },
+  hard:    { keep: 0.15, R: 3, texture: 0.5,  avoidExtremes: true },
+  expert:  { keep: 0,    R: 3, texture: 0.8,  avoidExtremes: true },
+};
 
 // Deterministic (seeded) generator: adds clues until logic alone solves the region, then prunes.
 // Irregular regions can contain "twin" tiles whose neighbourhoods are identical, which no clue set can
 // separate; in that case one stuck tile's target is flipped (a 1-tile change to the art) and we retry.
 // The (possibly modified) target is returned alongside the clues.
-function makeRegionClues(target, nb, keep, rnd) {
+function makeRegionClues(target, nb, keep, rnd, avoidExtremes = false) {
   const total = nb.length;
   const count = i => { let s = 0; for (const j of nb[i]) s += target[j]; return s; };
+  const trivial = i => { const c = count(i); return c === 0 || c === nb[i].length; };   // "all dark" / "all light" clue
+  // Choose from `list`, preferring informative clues when asked (fall back to anything).
+  const choose = (list, n = 1) => {
+    if (avoidExtremes) { const good = list.filter(i => !trivial(i)); if (good.length >= n) list = good; }
+    return list.slice(0, n);
+  };
   let clues, flips = 0;
   attempt: for (;;) {
     clues = new Int8Array(total).fill(-1);
-    for (const i of shuffle([...Array(total).keys()], rnd).slice(0, Math.round(total * 0.18))) clues[i] = count(i);
+    for (const i of choose(shuffle([...Array(total).keys()], rnd), Math.round(total * 0.18))) clues[i] = count(i);
+    let prev = null;   // deductions only grow as clues are added, so each solve continues from the last
     for (;;) {
-      const { state, solved } = solve(nb, clues);
+      const { state, solved } = solve(nb, clues, prev); prev = state;
       if (solved) break attempt;
       const cand = new Set();
       for (let i = 0; i < total; i++) if (state[i] === UNK) for (const j of nb[i]) if (clues[j] < 0) cand.add(j);
@@ -354,13 +374,16 @@ function makeRegionClues(target, nb, keep, rnd) {
         continue attempt;
       }
       const frontier = list.filter(i => state[i] === UNK && nb[i].some(j => state[j] !== UNK));
-      const pool = frontier.length ? frontier : list;
-      const pick = pool[Math.floor(rnd() * pool.length)];
+      const pool = shuffle(frontier.length ? frontier : list, rnd);
+      const pick = choose(pool)[0];
       clues[pick] = count(pick);
     }
   }
-  for (const i of shuffle([...Array(total).keys()].filter(i => clues[i] >= 0), rnd)) {
-    if (rnd() < keep) continue;
+  // Prune redundant clues. Trivial 0/9 clues are tried first so they only survive when truly needed.
+  let order = shuffle([...Array(total).keys()].filter(i => clues[i] >= 0), rnd);
+  if (avoidExtremes) order = [...order.filter(trivial), ...order.filter(i => !trivial(i))];
+  for (const i of order) {
+    if (rnd() < keep && !(avoidExtremes && trivial(i))) continue;
     const v = clues[i]; clues[i] = -1;
     if (!solve(nb, clues).solved) clues[i] = v;
   }
@@ -392,7 +415,7 @@ const $ = id => document.getElementById(id);
 const canvas = $('view'), ctx = canvas.getContext('2d');
 const mini = $('minimapCanvas'), mctx = mini.getContext('2d');
 const statusEl = $('status'), loadingEl = $('loading');
-const imageSel = $('image'), sizeSel = $('size'), densitySel = $('density'), fileInput = $('file');
+const imageSel = $('image'), sizeSel = $('size'), difficultySel = $('difficulty'), fileInput = $('file');
 const panBtn = $('panBtn'), modeBtn = $('modeBtn');
 
 for (const im of IMAGES) { const o = document.createElement('option'); o.value = im.key; o.textContent = im.name; imageSel.appendChild(o); }
@@ -433,7 +456,8 @@ let wrongSet = new Set(), hinted = -1, currentRegion = 0;
 const view = { scale: 8, ox: 0, oy: 0 };
 
 // Build the grid from a loaded image.
-function buildGame(img, key, totalTiles, keep) {
+function buildGame(img, key, totalTiles, diffName) {
+  const diff = DIFFICULTY[diffName] || DIFFICULTY.normal;
   const aspect = img.naturalWidth / img.naturalHeight;
   const W = Math.max(20, Math.round(Math.sqrt(totalTiles * aspect))), H = Math.max(20, Math.round(Math.sqrt(totalTiles / aspect))), N = W * H;
 
@@ -449,9 +473,17 @@ function buildGame(img, key, totalTiles, keep) {
   let sum = 0;
   for (let i = 0; i < N; i++) { const l = 0.299 * rgb[i * 4] + 0.587 * rgb[i * 4 + 1] + 0.114 * rgb[i * 4 + 2]; lum[i] = l; sum += l; }
   const globalMean = sum / N;
-  const R = 4, blur = boxBlur(lum, W, H, R);
-  const target = new Uint8Array(N);
-  for (let i = 0; i < N; i++) target[i] = lum[i] > 0.55 * blur[i] + 0.45 * globalMean ? 1 : 0;
+  const blur = boxBlur(lum, W, H, diff.R);
+  // Local-contrast threshold, with Floyd–Steinberg error diffusion scaled by the difficulty's texture:
+  // at 0 flat areas stay flat (many trivial clues); towards 1 they become a halftone of the painting.
+  const target = new Uint8Array(N), err = new Float32Array(N);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x, thr = 0.55 * blur[i] + 0.45 * globalMean, v = lum[i] + err[i];
+    const on = v > thr ? 1 : 0; target[i] = on;
+    const e = (v - (on ? thr + 60 : thr - 60)) * diff.texture;
+    if (x + 1 < W) err[i + 1] += e * 7 / 16;
+    if (y + 1 < H) { if (x > 0) err[i + W - 1] += e * 3 / 16; err[i + W] += e * 5 / 16; if (x + 1 < W) err[i + W + 1] += e / 16; }
+  }
 
   // Cut the grid into organic regions (deterministic for this picture + size).
   const { id: rid, count } = partition(W, H, mulberry32(hashStr(`${key}:${W}x${H}:regions`)));
@@ -462,19 +494,54 @@ function buildGame(img, key, totalTiles, keep) {
     for (const g of cells) { const x = g % W, y = (g / W) | 0; if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y; }
     return { cells, nb: null, clues: null, bbox: [minx, miny, maxx, maxy] };
   });
-  G = { key, W, H, N, count, rid, localIdx, reg, target, rgb, keep, flips: 0,
+  G = { key, W, H, N, count, rid, localIdx, reg, target, rgb, diff, diffName, flips: 0,
         marks: new Uint8Array(N), done: new Uint8Array(count),
         pix: new ImageData(W, H), tileCanvas: Object.assign(document.createElement('canvas'), { width: W, height: H }) };
   for (let r = 0; r < count; r++) G.reg[r].nb = regionNeighbors(G.reg[r].cells, W, rid, r, localIdx);
-  // Generate every region up front (~1 s): clues are then fixed before progress is restored,
-  // so completion checks and the revealed art always agree with what the player solved.
-  for (let r = 0; r < count; r++) ensureRegion(r);
   loadProgress();
-  for (let r = 0; r < count; r++) G.done[r] = regionComplete(r) ? 1 : 0;
+  // Regions that carry saved marks are generated now (generation may adjust their target), so
+  // completion checks agree with what the player solved; every other region is generated in idle time.
+  const touched = new Uint8Array(count); for (let g = 0; g < N; g++) if (G.marks[g] !== UNK) touched[rid[g]] = 1;
+  for (let r = 0; r < count; r++) if (touched[r]) ensureRegion(r);
+  for (let r = 0; r < count; r++) G.done[r] = touched[r] && regionComplete(r) ? 1 : 0;
   repaintAll();
   history = []; wrongSet.clear(); hinted = -1;
   fitView();
+  scheduleIdleGeneration();
   updateStatus();
+}
+
+// Generate the remaining regions in the background so digits are ready when you zoom in.
+let idleQueued = false;
+function scheduleIdleGeneration() {
+  if (idleQueued) return; idleQueued = true;
+  // Use idle time when the browser offers it, but never stall: at least one region is prepared per tick
+  // (the idle callback's timeout guarantees a tick even on a busy page).
+  const ric = window.requestIdleCallback ? (f => requestIdleCallback(f, { timeout: 150 })) : (f => setTimeout(() => f({ timeRemaining: () => 0 }), 40));
+  const step = deadline => {
+    const g = G; if (!g) { idleQueued = false; return; }
+    let did = false;
+    do {
+      const r = nextRegionToPrepare();
+      if (r < 0) { idleQueued = false; if (did) requestDraw(); return; }
+      ensureRegion(r); did = true;
+    } while (deadline.timeRemaining() > 6);
+    requestDraw();
+    ric(step);
+  };
+  ric(step);
+}
+// Regions visible on screen come first, so digits are ready where the player is looking.
+function nextRegionToPrepare() {
+  const s = view.scale, vx0 = -view.ox / s, vy0 = -view.oy / s, vx1 = (canvas.clientWidth - view.ox) / s, vy1 = (canvas.clientHeight - view.oy) / s;
+  let fallback = -1;
+  for (let r = 0; r < G.count; r++) {
+    if (G.reg[r].clues) continue;
+    const [x0, y0, x1, y1] = G.reg[r].bbox;
+    if (x1 + 1 >= vx0 && x0 <= vx1 && y1 + 1 >= vy0 && y0 <= vy1) return r;
+    if (fallback < 0) fallback = r;
+  }
+  return fallback;
 }
 
 function boxBlur(src, W, H, R) {
@@ -498,14 +565,16 @@ function localMarks(r) { const c = regionCells(r), m = new Uint8Array(c.length);
 function ensureRegion(r) {
   const R = G.reg[r];
   if (!R.clues) {
-    const res = makeRegionClues(localTarget(r), R.nb, G.keep, mulberry32(hashStr(`${G.key}:${G.W}x${G.H}:${r}`)));
+    const res = makeRegionClues(localTarget(r), R.nb, G.diff.keep, mulberry32(hashStr(`${G.key}:${G.W}x${G.H}:${G.diffName}:${r}`)), G.diff.avoidExtremes);
     R.clues = res.clues; G.flips += res.flips;
     if (res.flips) R.cells.forEach((g, i) => G.target[g] = res.target[i]);   // write back the altered art
   }
   return R.clues;
 }
 function regionComplete(r) { for (const g of regionCells(r)) if (G.marks[g] === UNK || (G.marks[g] === LIGHT) !== (G.target[g] === 1)) return false; return true; }
-function clueAt(g) { return ensureRegion(G.rid[g])[G.localIdx[g]]; }   // clue value at a global cell, or -1
+// Clue value at a global cell, or -1. Never generates: drawing must stay cheap, so unprepared regions
+// simply show no digits until the idle generator (which prioritises the view) gets to them.
+function clueAt(g) { const c = G.reg[G.rid[g]].clues; return c ? c[G.localIdx[g]] : -1; }
 function clueDone(g) {  // every tile in the (region-clipped) 3×3 block is marked
   const R = G.reg[G.rid[g]], cells = R.cells;
   for (const j of R.nb[G.localIdx[g]]) if (G.marks[cells[j]] === UNK) return false;
@@ -528,6 +597,7 @@ function setMark(g, v, record = true) {
   if (!G || G.marks[g] === v) return;
   const r = regionOf(g);
   if (G.done[r]) return;                       // completed regions are locked
+  ensureRegion(r);                             // fix the region's clues/target before the first mark lands
   if (record) history.push([g, G.marks[g]]);
   G.marks[g] = v; wrongSet.delete(g);
   paintTile(g);
@@ -541,7 +611,7 @@ function saveProgressSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(sa
 function saveProgress() {
   try { localStorage.setItem(saveKey(), btoa(String.fromCharCode(...G.marks))); } catch {}
 }
-const saveKey = () => `pw.save.v2.${G.key}.${G.W}x${G.H}`;
+const saveKey = () => `pw.save.v3.${G.key}.${G.W}x${G.H}.${G.diffName}`;
 function loadProgress() {
   try {
     const s = localStorage.getItem(saveKey()); if (!s) return;
@@ -617,6 +687,10 @@ function draw() {
       const g = y * G.W + x, r = regionOf(g);
       if (G.done[r]) continue;
       const m = G.marks[g], cx = sx(x + .5), cy = sy(y + .5);
+      if (!G.reg[r].clues) {   // still being prepared in the background: a faint dot instead of digits
+        ctx.fillStyle = C.regionLine; ctx.beginPath(); ctx.arc(cx, cy, Math.max(1, s * 0.06), 0, Math.PI * 2); ctx.fill();
+        continue;
+      }
       if (m === DARK) { ctx.strokeStyle = C.xmark; ctx.lineWidth = Math.max(1, s * 0.08); const k = s * 0.2; ctx.beginPath(); ctx.moveTo(cx - k, cy - k); ctx.lineTo(cx + k, cy + k); ctx.moveTo(cx + k, cy - k); ctx.lineTo(cx - k, cy + k); ctx.stroke(); }
       const v = clueAt(g);
       if (v >= 0) {
@@ -660,7 +734,7 @@ $('minimap').addEventListener('pointerdown', e => {
 function updateStatus() {
   if (!G) return;
   const marked = G.marks.reduce((s, v) => s + (v !== UNK), 0);
-  setStatus(`<b>${G.W}×${G.H}</b> = ${G.N.toLocaleString()} tiles · region <b>${currentRegion + 1}</b>/${G.count} (${regionCells(currentRegion).length} tiles) · <b>${doneCount()}</b> regions revealed · ${(100 * marked / G.N).toFixed(1)}% marked`);
+  setStatus(`<b>${G.W}×${G.H}</b> = ${G.N.toLocaleString()} tiles · ${G.diffName} · region <b>${currentRegion + 1}</b>/${G.count} (${regionCells(currentRegion).length} tiles) · <b>${doneCount()}</b> regions revealed · ${(100 * marked / G.N).toFixed(1)}% marked`);
 }
 
 // ============================================================ Input
@@ -682,6 +756,7 @@ canvas.addEventListener('pointerdown', e => {
   const wantPan = e.button === 1 || panTool || spaceHeld || (e.pointerType === 'touch' && g < 0);
   if (wantPan || g < 0) { drag = { kind: 'pan', lastX: e.offsetX, lastY: e.offsetY }; return; }
   currentRegion = regionOf(g);
+  if (!G.reg[currentRegion].clues) { ensureRegion(currentRegion); requestDraw(); }   // first click on a region prepares it
   const paint = e.button === 2 ? DARK : tapMode;
   drag = { kind: 'paint', value: G.marks[g] === paint ? UNK : paint };
   setMark(g, drag.value); updateStatus();
@@ -781,7 +856,7 @@ function loadImage(src, key) {
   loadingEl.hidden = false; loadingEl.textContent = 'Loading picture…'; G = null; requestDraw();
   const img = new Image(); img.crossOrigin = 'anonymous';
   img.onload = () => {
-    try { buildGame(img, key, +sizeSel.value, +densitySel.value); loadingEl.hidden = true; currentKey = key; }
+    try { buildGame(img, key, +sizeSel.value, difficultySel.value); loadingEl.hidden = true; currentKey = key; }
     catch (e) { loadingEl.textContent = 'Could not read that picture (' + e.message + ')'; }
   };
   img.onerror = () => { loadingEl.textContent = 'Could not load the picture — check your connection and try again.'; };
@@ -795,7 +870,7 @@ fileInput.onchange = () => {
   fileInput.value = '';
 };
 imageSel.onchange = loadSelected;
-sizeSel.onchange = densitySel.onchange = () => { if (imageSel.value === 'custom') { setStatus('Re-pick your image to apply the new setting'); return; } loadSelected(); };
+sizeSel.onchange = difficultySel.onchange = () => { if (imageSel.value === 'custom') { setStatus('Re-pick your image to apply the new setting'); return; } loadSelected(); };
 
 // ============================================================ Background music (Wikimedia Commons; PD / CC)
 const TRACKS = [
