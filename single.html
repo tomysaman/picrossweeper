@@ -149,7 +149,7 @@
   .cell.satisfied        { color: var(--clue-done-on-unknown); }
   .cell.satisfied.light  { color: var(--clue-done-on-light); }
   .cell.satisfied.dark   { color: var(--clue-done-on-dark); }
-  .cell.hinted { animation: pulse .9s ease-in-out 3; }
+  .cell.hinted { animation: pulse .9s ease-in-out; }
   @keyframes pulse { 50% { box-shadow: 0 0 0 4px var(--accent); } }
 
   #board.won .cell { cursor: default; }
@@ -637,6 +637,8 @@ document.getElementById('hintBtn').onclick = () => {
     if (state[i] !== UNK && marks[i] !== state[i]) {
       setMark(i, state[i]);
       cells[i].classList.add('hinted');
+      // drop the class when the pulse ends, so hinting the same tile again replays it
+      cells[i].addEventListener('animationend', e => e.target.classList.remove('hinted'), { once: true });
       setStatus('Hint: one tile deduced for you');
       return;
     }
