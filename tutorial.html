@@ -231,7 +231,8 @@
 
 <p>
   Here is one valid arrangement for each number. In each diagram the clue sits in the middle, and the
-  count includes it. Notice that <b>a number is not always light</b> — the 0 and the 1 below are dark tiles.
+  count includes it. Notice that <b>a number is not always light</b> — the 0, the 1 and the 5 below are
+  sitting on dark tiles, and any of the others could be too.
 </p>
 
 <div class="gallery" id="gallery"></div>
@@ -328,7 +329,7 @@
   <div class="flow">
     <div>
       <div class="grid" id="d-r1a"></div>
-      <div class="step-label">needs 3, has 1, and 2 unknowns left…</div>
+      <div class="step-label">needs 3, the clue tile is the only light so far, 2 unknowns left…</div>
     </div>
     <span class="arrow">→</span>
     <div>
@@ -507,7 +508,7 @@ const EXAMPLES = [
   ['....##...', 'Two lights, and this time the clue tile is one of them. Typical of a thin edge of the picture.'],
   ['...###...', 'Three lights. A clue this low next to a high one is where the picture\'s outline runs.'],
   ['.##.##...', 'Four lights — a corner of a solid shape pushing into the block.'],
-  ['.#.###.#.', 'Five lights. Middling numbers say least on their own; they pay off when compared with a neighbour.'],
+  ['###...##.', 'Five lights, and the clue tile is dark — any number can sit on a dark tile, not just the low ones. Middling numbers say least on their own; they pay off when compared with a neighbour.'],
   ['.##.##.##', 'Six lights: a solid band covering two of the three columns.'],
   ['#######..', 'Seven lights — only two tiles in the block are dark. You are well inside a filled area.'],
   ['########.', 'Eight lights: a single dark tile hiding in the block. Find it and everything else is light.'],
