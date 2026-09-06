@@ -1,0 +1,645 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Picrossweeper</title>
+<style>
+  :root {
+    --bg: #2b2620;
+    --panel: #3a332b;
+    --ink: #f1e7d0;
+    --muted: #b9ad94;
+    --unknown: #6b6052;
+    --unknown-hover: #7d7160;
+    --light: #f3e4b8;
+    --dark: #1c2a3a;
+    --clue-on-light: #3a2e14;
+    --clue-on-dark: #e8dcbf;
+    --clue-on-unknown: #f7efdc;
+    --accent: #d9a441;
+    --bad: #c9503f;
+    --good: #7fb069;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.4 Georgia, "Times New Roman", serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+    gap: 14px;
+    user-select: none;
+  }
+  h1 { margin: 0; font-size: 26px; letter-spacing: 1px; color: var(--accent); font-weight: normal; }
+  h1 small { color: var(--muted); font-size: 13px; margin-left: 10px; letter-spacing: 0; }
+
+  .toolbar {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center;
+    background: var(--panel); padding: 10px 14px; border-radius: 10px;
+  }
+  .toolbar label { color: var(--muted); font-size: 13px; }
+  select, button {
+    font: inherit; font-size: 14px;
+    background: #4b4238; color: var(--ink);
+    border: 1px solid #6a5e50; border-radius: 6px; padding: 6px 12px; cursor: pointer;
+  }
+  button:hover, select:hover { background: #5a5045; }
+  button.primary { background: var(--accent); color: #2b2620; border-color: var(--accent); font-weight: bold; }
+  button.primary:hover { background: #e6b556; }
+  button.active { outline: 2px solid var(--accent); }
+
+  .music { display: inline-flex; gap: 6px; align-items: center; padding-left: 10px; border-left: 1px solid #5a5045; }
+  .music input[type=range] { width: 80px; accent-color: var(--accent); }
+  .now-playing { color: var(--muted); font-size: 12px; font-style: italic; min-height: 16px; text-align: center; }
+  .now-playing a { color: inherit; }
+  .now-playing.loading::after { content: " · loading…"; animation: blink 1.2s infinite; }
+  @keyframes blink { 50% { opacity: .35; } }
+  .status { min-height: 22px; color: var(--muted); text-align: center; }
+  .status.win { color: var(--good); font-size: 18px; }
+  .status.bad { color: var(--bad); }
+
+  #boardWrap { padding: 10px; background: var(--panel); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+  #board {
+    display: grid;
+    gap: 2px;
+    touch-action: none;
+  }
+  .cell {
+    width: var(--cell); height: var(--cell);
+    background: var(--unknown);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: bold; font-size: calc(var(--cell) * 0.55);
+    color: var(--clue-on-unknown);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background .08s;
+    position: relative;
+  }
+  .cell:hover { filter: brightness(1.12); }
+  .cell.light { background: var(--light); color: var(--clue-on-light); }
+  .cell.dark  { background: var(--dark);  color: var(--clue-on-dark); }
+  .cell.dark::after {
+    content: ""; position: absolute; inset: 30%;
+    background:
+      linear-gradient(45deg, transparent 44%, #4c5f78 44%, #4c5f78 56%, transparent 56%),
+      linear-gradient(-45deg, transparent 44%, #4c5f78 44%, #4c5f78 56%, transparent 56%);
+    opacity: .9;
+  }
+  .cell.dark.clue::after { display: none; }
+  .cell.wrong { box-shadow: inset 0 0 0 3px var(--bad); }
+  .cell.satisfied { opacity: .55; }
+  .cell.hinted { animation: pulse .9s ease-in-out 3; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 4px var(--accent); } }
+
+  #board.won .cell { cursor: default; opacity: 1; }
+  #board.won .cell.light { background: #f7e9bf; }
+  #board.won .cell.dark  { background: #16202c; }
+  #board.won .cell.dark::after { display: none; }
+  #board.won .cell.clue { color: transparent; }
+
+  .help { max-width: 640px; color: var(--muted); font-size: 13px; text-align: center; }
+  .help b { color: var(--ink); }
+  .legend { display: inline-flex; gap: 14px; align-items: center; margin-top: 4px; }
+  .sw { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; }
+  footer { color: #7d7160; font-size: 12px; margin-top: auto; }
+</style>
+</head>
+<body>
+
+<h1>Picrossweeper <small>a picross × minesweeper puzzle</small></h1>
+
+<div class="toolbar">
+  <label>Picture
+    <select id="pattern"></select>
+  </label>
+  <label>Size
+    <select id="size">
+      <option value="10">10 × 10</option>
+      <option value="12">12 × 12</option>
+      <option value="15" selected>15 × 15</option>
+      <option value="20">20 × 20</option>
+      <option value="25">25 × 25</option>
+    </select>
+  </label>
+  <label>Clues
+    <select id="density">
+      <option value="0.8">Generous</option>
+      <option value="0.45" selected>Normal</option>
+      <option value="0">Minimal</option>
+    </select>
+  </label>
+  <button id="newBtn" class="primary">New puzzle</button>
+  <button id="checkBtn" title="Highlight mistakes">Check</button>
+  <button id="hintBtn" title="Reveal one logically deducible tile">Hint</button>
+  <button id="undoBtn">Undo</button>
+  <button id="clearBtn">Clear</button>
+  <button id="modeBtn" title="Tap mode for touch: which colour a tap paints">Tap: ☀ light</button>
+  <span class="music">
+    <button id="musicBtn" title="Play / pause background music (M)">♪ Play</button>
+    <button id="nextBtn" title="Next track">⏭</button>
+    <input id="volume" type="range" min="0" max="1" step="0.02" value="0.5" title="Volume">
+  </span>
+</div>
+<div id="nowPlaying" class="now-playing"></div>
+
+<div id="status" class="status"></div>
+
+<div id="boardWrap"><div id="board"></div></div>
+
+<div class="help">
+  Each <b>number</b> tells you how many <b>light</b> tiles sit in the 3×3 block around it
+  (the numbered tile <b>counts itself</b>). Every tile — numbered or not — is either light or dark.
+  Fill the whole grid to reveal the picture.
+  <div class="legend">
+    <span><span class="sw" style="background:var(--light)"></span>Left‑click / drag: light</span>
+    <span><span class="sw" style="background:var(--dark)"></span>Right‑click / drag: dark</span>
+    <span><span class="sw" style="background:var(--unknown)"></span>Click again: clear</span>
+  </div>
+  <div>Numbers fade once their 3×3 block is fully satisfied. Every puzzle is generated to be solvable by pure logic — no guessing needed.</div>
+  <div>Keys: <b>N</b> new puzzle · <b>Ctrl+Z</b> undo · <b>X</b> tap colour · <b>M</b> music. Music starts on your first click on the board.</div>
+</div>
+
+<footer>
+  Inspired by <a href="https://www.proverbsgame.com/" style="color:inherit">Proverbs</a>. Built as a playground project.<br>
+  Music streamed from <a href="https://commons.wikimedia.org/wiki/Category:Lute_music" style="color:inherit">Wikimedia Commons</a>:
+  <a href="https://commons.wikimedia.org/wiki/File:Balletto_detto_Il_conte_Orlando.ogg" style="color:inherit">Il conte Orlando</a> (US Marine Band, public domain) ·
+  <a href="https://commons.wikimedia.org/wiki/File:Ludwig_Senfl_--_Ach_Elslein.opus" style="color:inherit">Ach Elslein</a> (Collegium Vocale, CC BY 3.0) ·
+  <a href="https://commons.wikimedia.org/wiki/File:Butt_Music_-_Hieronymus_Bosch_(Lute).opus" style="color:inherit">Bosch lute piece</a> (panimetal7, CC BY 3.0)
+</footer>
+
+<script>
+'use strict';
+
+// ---------- Pixel-art targets ('#' = light, '.' = dark) ----------
+const ART = {
+  Tulip: [
+    "....#..#....",
+    "...##.##....",
+    "...######...",
+    "...######...",
+    "....####....",
+    ".....##.....",
+    ".....##.....",
+    "..#..##..#..",
+    "...#.##.#...",
+    "....####....",
+    ".....##.....",
+    ".....##.....",
+  ],
+  Windmill: [
+    "#.......#",
+    ".#..#..#.",
+    "..#.#.#..",
+    "...###...",
+    "#########",
+    "...###...",
+    "..#.#.#..",
+    ".#..#..#.",
+    "#...#...#",
+    "...###...",
+    "..#####..",
+    "..#####..",
+    "..#####..",
+    ".#######.",
+  ],
+  Clog: [
+    "..............",
+    "......#####...",
+    ".....#######..",
+    "....#########.",
+    "...##########.",
+    "..###########.",
+    ".############.",
+    "##############",
+    "##############",
+    ".############.",
+    "..##########..",
+  ],
+  Heart: [
+    "..##...##..",
+    ".####.####.",
+    "###########",
+    "###########",
+    "###########",
+    ".#########.",
+    "..#######..",
+    "...#####...",
+    "....###....",
+    ".....#.....",
+  ],
+  Cat: [
+    ".#.....#.",
+    ".##...##.",
+    ".#######.",
+    ".#.###.#.",
+    ".#######.",
+    "..#####..",
+    "...###...",
+    "..#####..",
+    ".#######.",
+    ".#######.",
+    ".##.#.##.",
+  ],
+  Fish: [
+    "........##..",
+    "...####.##..",
+    ".#######.##.",
+    "##.#########",
+    "############",
+    ".#######.##.",
+    "...####.##..",
+    "........##..",
+  ],
+  Cheese: [
+    ".......####...",
+    "....########..",
+    ".############.",
+    "#.#.########.#",
+    "#####.#.######",
+    "###.######.###",
+    "#####.#.#####.",
+    ".#.#########..",
+    "..########....",
+    "...####.......",
+  ],
+};
+
+// ---------- Utilities ----------
+const rnd = n => Math.floor(Math.random() * n);
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = rnd(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
+const UNK = 0, LIGHT = 1, DARK = 2;
+
+function neighborsOf(n) {
+  // Precompute 3x3 neighborhood index lists (including self) for an n×n grid.
+  const nb = new Array(n * n);
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+    const list = [];
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      const rr = r + dr, cc = c + dc;
+      if (rr >= 0 && rr < n && cc >= 0 && cc < n) list.push(rr * n + cc);
+    }
+    nb[r * n + c] = list;
+  }
+  return nb;
+}
+
+// ---------- Target generation ----------
+function makeTarget(n, patternName) {
+  const t = new Uint8Array(n * n);
+  if (patternName === 'Random') {
+    // Cellular-automaton blob: random noise smoothed a couple of times → organic shapes.
+    for (let i = 0; i < t.length; i++) t[i] = Math.random() < 0.48 ? 1 : 0;
+    const nb = neighborsOf(n);
+    for (let pass = 0; pass < 2; pass++) {
+      const next = new Uint8Array(t.length);
+      for (let i = 0; i < t.length; i++) {
+        let s = 0; for (const j of nb[i]) s += t[j];
+        next[i] = s >= 5 ? 1 : 0;
+      }
+      t.set(next);
+    }
+    return t;
+  }
+  const rows = ART[patternName];
+  const h = rows.length, w = rows[0].length;
+  // Scale the art to fill the grid (nearest-neighbor), keeping aspect ratio, centered.
+  const scale = Math.max(1, Math.floor(Math.min(n / w, n / h)));
+  const sw = w * scale, sh = h * scale;
+  const ox = Math.floor((n - sw) / 2), oy = Math.floor((n - sh) / 2);
+  for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) {
+    if (rows[Math.floor(y / scale)][Math.floor(x / scale)] === '#')
+      t[(oy + y) * n + (ox + x)] = 1;
+  }
+  return t;
+}
+
+// ---------- Logic solver ----------
+// Returns { state, solved } after exhausting single-clue and pairwise-subset deductions.
+// Also used for hints (a single step) and for guaranteeing puzzles need no guessing.
+function solve(n, nb, clues, initial, maxSteps = Infinity) {
+  const state = initial ? Uint8Array.from(initial) : new Uint8Array(n * n);
+  const clueCells = [];
+  for (let i = 0; i < n * n; i++) if (clues[i] >= 0) clueCells.push(i);
+  // Only clues within Chebyshev distance ≤ 2 can share neighborhood cells.
+  const near = new Map();
+  for (const a of clueCells) {
+    const ra = (a / n) | 0, ca = a % n, list = [];
+    for (const b of clueCells) if (b !== a && Math.abs(((b / n) | 0) - ra) <= 2 && Math.abs(b % n - ca) <= 2) list.push(b);
+    near.set(a, list);
+  }
+
+  const info = i => {
+    let lit = 0; const unk = [];
+    for (const j of nb[i]) { if (state[j] === LIGHT) lit++; else if (state[j] === UNK) unk.push(j); }
+    return { need: clues[i] - lit, unk };
+  };
+
+  let steps = 0;
+  let changed = true;
+  while (changed && steps < maxSteps) {
+    changed = false;
+    // Rule 1: a clue's unknown neighbors are all light or all dark.
+    for (const i of clueCells) {
+      const { need, unk } = info(i);
+      if (!unk.length) continue;
+      if (need === 0) { for (const j of unk) state[j] = DARK; changed = true; steps++; }
+      else if (need === unk.length) { for (const j of unk) state[j] = LIGHT; changed = true; steps++; }
+      if (steps >= maxSteps) return { state, solved: false };
+    }
+    if (changed) continue;
+    // Rule 2: subset reasoning between two clues whose neighborhoods overlap.
+    for (const a of clueCells) {
+      const A = info(a);
+      if (!A.unk.length) continue;
+      const setA = new Set(A.unk);
+      for (const b of near.get(a)) {
+        const B = info(b);
+        if (B.unk.length <= A.unk.length) continue;
+        let subset = true;
+        for (const j of A.unk) if (!B.unk.includes(j)) { subset = false; break; }
+        if (!subset) continue;
+        const diff = B.unk.filter(j => !setA.has(j));
+        const needDiff = B.need - A.need;
+        if (needDiff === 0) { for (const j of diff) state[j] = DARK; changed = true; steps++; }
+        else if (needDiff === diff.length) { for (const j of diff) state[j] = LIGHT; changed = true; steps++; }
+        if (changed) break;
+      }
+      if (changed) break;
+    }
+  }
+  let solved = true;
+  for (let i = 0; i < state.length; i++) if (state[i] === UNK) { solved = false; break; }
+  return { state, solved };
+}
+
+// ---------- Puzzle generation ----------
+// `keep` = probability a redundant clue survives pruning (0 → minimal puzzle, higher → easier).
+function makePuzzle(n, target, keep = 0.25) {
+  const nb = neighborsOf(n);
+  const total = n * n;
+  const count = i => { let s = 0; for (const j of nb[i]) s += target[j]; return s; };
+  const clues = new Int8Array(total).fill(-1);
+
+  // Seed with random clues.
+  for (const i of shuffle([...Array(total).keys()]).slice(0, Math.round(total * 0.18))) clues[i] = count(i);
+
+  // Add clues until the solver can finish without guessing.
+  for (;;) {
+    const { state, solved } = solve(n, nb, clues);
+    if (solved) break;
+    // Candidate spots for a new clue: any non-clue cell whose 3×3 block touches an unknown cell.
+    // (Unknown cells may themselves already be clues — e.g. two adjacent clue tiles that only know
+    // "one of us is light" — so we must be allowed to place the clue on an already-solved neighbor.)
+    const cand = new Set();
+    for (let i = 0; i < total; i++) if (state[i] === UNK) for (const j of nb[i]) if (clues[j] < 0) cand.add(j);
+    const list = [...cand];
+    // Prefer unknown cells that touch the solved frontier — gives the most local leverage.
+    const frontier = list.filter(i => state[i] === UNK && nb[i].some(j => state[j] !== UNK));
+    const pool = frontier.length ? frontier : list;
+    const pick = pool[rnd(pool.length)];
+    clues[pick] = count(pick);
+  }
+
+  // Prune: drop any clue that isn't needed to keep the puzzle solvable.
+  const order = shuffle([...Array(total).keys()].filter(i => clues[i] >= 0));
+  for (const i of order) {
+    if (Math.random() < keep) continue;
+    const v = clues[i]; clues[i] = -1;
+    if (!solve(n, nb, clues).solved) clues[i] = v;
+  }
+  return { n, nb, target, clues };
+}
+
+// ---------- Game state & rendering ----------
+const boardEl = document.getElementById('board');
+const statusEl = document.getElementById('status');
+const patternSel = document.getElementById('pattern');
+const sizeSel = document.getElementById('size');
+const densitySel = document.getElementById('density');
+const modeBtn = document.getElementById('modeBtn');
+
+for (const name of ['Random', ...Object.keys(ART)]) {
+  const o = document.createElement('option'); o.value = o.textContent = name; patternSel.appendChild(o);
+}
+
+let puzzle, marks, cells = [], history = [], won = false, tapMode = LIGHT;
+
+function setStatus(msg, cls = '') { statusEl.textContent = msg; statusEl.className = 'status ' + cls; }
+
+function newGame() {
+  const n = +sizeSel.value;
+  const name = patternSel.value;
+  const t0 = performance.now();
+  puzzle = makePuzzle(n, makeTarget(n, name), +densitySel.value);
+  marks = new Uint8Array(n * n);
+  history = []; won = false;
+  const clueCount = puzzle.clues.reduce((s, v) => s + (v >= 0), 0);
+  render();
+  setStatus(`${n}×${n} · ${clueCount} clues · generated in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+function render() {
+  const n = puzzle.n;
+  const cellPx = Math.max(16, Math.min(40, Math.floor((Math.min(window.innerWidth, 720) - 60) / n)));
+  boardEl.style.setProperty('--cell', cellPx + 'px');
+  boardEl.style.gridTemplateColumns = `repeat(${n}, var(--cell))`;
+  boardEl.innerHTML = '';
+  boardEl.classList.remove('won');
+  cells = [];
+  for (let i = 0; i < n * n; i++) {
+    const d = document.createElement('div');
+    d.className = 'cell';
+    d.dataset.i = i;
+    if (puzzle.clues[i] >= 0) { d.classList.add('clue'); d.textContent = puzzle.clues[i]; }
+    boardEl.appendChild(d);
+    cells.push(d);
+  }
+  refresh();
+}
+
+function refresh() {
+  const { n, nb, clues } = puzzle;
+  for (let i = 0; i < n * n; i++) {
+    const d = cells[i];
+    d.classList.toggle('light', marks[i] === LIGHT);
+    d.classList.toggle('dark', marks[i] === DARK);
+    d.classList.remove('wrong');
+    if (clues[i] >= 0) {
+      let lit = 0, unk = 0;
+      for (const j of nb[i]) { if (marks[j] === LIGHT) lit++; else if (marks[j] === UNK) unk++; }
+      d.classList.toggle('satisfied', unk === 0 && lit === clues[i]);
+    }
+  }
+  checkWin();
+}
+
+function checkWin() {
+  const { target } = puzzle;
+  for (let i = 0; i < marks.length; i++) {
+    if ((marks[i] === LIGHT) !== (target[i] === 1)) return;
+    if (marks[i] === UNK) return;
+  }
+  won = true;
+  boardEl.classList.add('won');
+  setStatus('✦ Picture revealed! ✦', 'win');
+}
+
+function setMark(i, v) {
+  if (won || marks[i] === v) return;
+  history.push([i, marks[i]]);
+  marks[i] = v;
+  refresh();
+}
+
+// ---------- Input: click / drag painting ----------
+let dragValue = null;
+
+function valueForButton(button, current) {
+  const paint = button === 2 ? DARK : (button === 0 ? tapMode : null);
+  if (paint === null) return null;
+  return current === paint ? UNK : paint;
+}
+
+boardEl.addEventListener('contextmenu', e => e.preventDefault());
+boardEl.addEventListener('pointerdown', e => {
+  const i = +e.target.dataset?.i; if (Number.isNaN(i)) return;
+  e.preventDefault();
+  dragValue = valueForButton(e.button, marks[i]);
+  if (dragValue === null) return;
+  setMark(i, dragValue);
+  boardEl.setPointerCapture?.(e.pointerId);
+});
+boardEl.addEventListener('pointermove', e => {
+  if (dragValue === null) return;
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  const i = +el?.dataset?.i; if (Number.isNaN(i)) return;
+  setMark(i, dragValue);
+});
+const endDrag = () => { dragValue = null; };
+boardEl.addEventListener('pointerup', endDrag);
+boardEl.addEventListener('pointercancel', endDrag);
+window.addEventListener('blur', endDrag);
+
+// ---------- Buttons ----------
+document.getElementById('newBtn').onclick = newGame;
+patternSel.onchange = sizeSel.onchange = densitySel.onchange = newGame;
+
+document.getElementById('undoBtn').onclick = () => {
+  if (won || !history.length) return;
+  const [i, prev] = history.pop(); marks[i] = prev; refresh();
+};
+document.getElementById('clearBtn').onclick = () => {
+  if (won) return;
+  marks.fill(UNK); history = []; refresh(); setStatus('');
+};
+document.getElementById('checkBtn').onclick = () => {
+  if (won) return;
+  let wrong = 0;
+  for (let i = 0; i < marks.length; i++) {
+    if (marks[i] === UNK) continue;
+    if ((marks[i] === LIGHT) !== (puzzle.target[i] === 1)) { cells[i].classList.add('wrong'); wrong++; }
+  }
+  setStatus(wrong ? `${wrong} mistake${wrong > 1 ? 's' : ''} highlighted` : 'No mistakes so far', wrong ? 'bad' : '');
+};
+document.getElementById('hintBtn').onclick = () => {
+  if (won) return;
+  // Run the solver from the player's *correct* marks only, one deduction at a time.
+  const base = Uint8Array.from(marks);
+  for (let i = 0; i < base.length; i++)
+    if (base[i] !== UNK && (base[i] === LIGHT) !== (puzzle.target[i] === 1)) base[i] = UNK;
+  const { state } = solve(puzzle.n, puzzle.nb, puzzle.clues, base, 1);
+  for (let i = 0; i < state.length; i++) {
+    if (state[i] !== UNK && marks[i] !== state[i]) {
+      setMark(i, state[i]);
+      cells[i].classList.add('hinted');
+      setStatus('Hint: one tile deduced for you');
+      return;
+    }
+  }
+  setStatus('Fix a mistake first — try “Check”', 'bad');
+};
+modeBtn.onclick = () => {
+  tapMode = tapMode === LIGHT ? DARK : LIGHT;
+  modeBtn.textContent = tapMode === LIGHT ? 'Tap: ☀ light' : 'Tap: ✕ dark';
+};
+// ---------- Background music (streamed from Wikimedia Commons; PD / CC BY 3.0) ----------
+const TRACKS = [
+  { title: 'Balletto detto “Il conte Orlando” — Respighi after Molinaro (1599)', by: 'US Marine Band · public domain',
+    page: 'https://commons.wikimedia.org/wiki/File:Balletto_detto_Il_conte_Orlando.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/1/17/Balletto_detto_Il_conte_Orlando.ogg' },
+  { title: 'Ach Elslein — Ludwig Senfl (c. 1520)', by: 'Collegium Vocale · CC BY 3.0',
+    page: 'https://commons.wikimedia.org/wiki/File:Ludwig_Senfl_--_Ach_Elslein.opus',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/7/7f/Ludwig_Senfl_--_Ach_Elslein.opus' },
+  { title: 'Lute piece from Bosch’s “Garden of Earthly Delights”', by: 'panimetal7 · CC BY 3.0',
+    page: 'https://commons.wikimedia.org/wiki/File:Butt_Music_-_Hieronymus_Bosch_(Lute).opus',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/3/32/Butt_Music_-_Hieronymus_Bosch_%28Lute%29.opus' },
+];
+const audio = new Audio();
+audio.preload = 'none';
+const musicBtn = document.getElementById('musicBtn');
+const nextBtn = document.getElementById('nextBtn');
+const volumeEl = document.getElementById('volume');
+const nowEl = document.getElementById('nowPlaying');
+let trackIdx = rnd(TRACKS.length), musicWanted = false;
+
+try { const v = localStorage.getItem('pw.volume'); if (v !== null) volumeEl.value = v; } catch {}
+audio.volume = +volumeEl.value;
+
+function loadTrack(i) {
+  trackIdx = (i + TRACKS.length) % TRACKS.length;
+  const t = TRACKS[trackIdx];
+  audio.src = t.src;
+  nowEl.innerHTML = `♪ <a href="${t.page}" target="_blank" rel="noopener">${t.title}</a> — ${t.by}`;
+}
+function updateMusicBtn() {
+  musicBtn.textContent = (!audio.paused && !audio.ended) ? '♪ Pause' : '♪ Play';
+}
+async function playMusic() {
+  musicWanted = true;
+  if (!audio.src) loadTrack(trackIdx);
+  try { await audio.play(); }
+  catch (e) {
+    // AbortError just means we switched tracks mid-load; only a NotAllowedError is a real autoplay block.
+    if (e.name === 'NotAllowedError') nowEl.textContent = 'Music blocked by the browser — click ♪ Play to start it.';
+  }
+  updateMusicBtn();
+}
+function pauseMusic() { musicWanted = false; audio.pause(); updateMusicBtn(); }
+
+musicBtn.onclick = () => (audio.paused ? playMusic() : pauseMusic());
+nextBtn.onclick = () => { loadTrack(trackIdx + 1); if (musicWanted) playMusic(); };
+volumeEl.oninput = () => { audio.volume = +volumeEl.value; try { localStorage.setItem('pw.volume', volumeEl.value); } catch {} };
+audio.addEventListener('ended', () => { loadTrack(trackIdx + 1); if (musicWanted) playMusic(); });
+audio.addEventListener('error', () => {
+  // Skip a track that fails to load (offline, or the host removed it).
+  nowEl.textContent = `Couldn't load “${TRACKS[trackIdx].title}” — skipping.`;
+  if (musicWanted) setTimeout(() => nextBtn.onclick(), 1500);
+});
+audio.addEventListener('play', updateMusicBtn);
+audio.addEventListener('pause', updateMusicBtn);
+// Streams come from a CDN, so show when we're buffering vs actually playing.
+const setLoading = on => nowEl.classList.toggle('loading', on);
+audio.addEventListener('waiting', () => setLoading(true));
+audio.addEventListener('loadstart', () => setLoading(true));
+audio.addEventListener('playing', () => setLoading(false));
+audio.addEventListener('pause', () => setLoading(false));
+// Autoplay only after the first interaction with the board (browsers block it before any gesture).
+boardEl.addEventListener('pointerdown', () => { if (!audio.src) playMusic(); }, { once: true });
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'z' && (e.ctrlKey || e.metaKey)) document.getElementById('undoBtn').click();
+  if (e.key === 'n') newGame();
+  if (e.key === 'x') modeBtn.click();
+  if (e.key === 'm') musicBtn.click();
+});
+window.addEventListener('resize', () => { if (puzzle) { const m = marks; render(); marks = m; refresh(); } });
+
+newGame();
+</script>
+</body>
+</html>
