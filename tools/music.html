@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Picrossweeper — Music Library</title>
+<style>
+  :root {
+    --bg: #2b2620;
+    --panel: #3a332b;
+    --panel-hi: #453d33;
+    --ink: #f1e7d0;
+    --muted: #b9ad94;
+    --btn: #4b4238;
+    --btn-border: #6a5e50;
+    --btn-hover: #5a5045;
+    --accent: #d9a441;
+    --accent-hover: #e6b556;
+    --on-accent: #2b2620;
+    --shadow: rgba(0,0,0,.4);
+    --pill-single: #4c6f8a;
+    --pill-giant: #7a5a8a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.5 Georgia, "Times New Roman", serif;
+    padding: 24px 16px 60px;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  h1 { margin: 0 0 4px; font-size: 28px; font-weight: normal; letter-spacing: .5px; color: var(--accent); text-align: center; }
+  .sub { text-align: center; color: var(--muted); font-size: 14px; margin-bottom: 22px; }
+  .sub a { color: inherit; }
+
+  .filters {
+    display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+    background: var(--panel); border-radius: 10px; padding: 10px 14px; margin-bottom: 20px;
+  }
+  .filters button {
+    font: inherit; font-size: 13px; background: var(--btn); color: var(--ink);
+    border: 1px solid var(--btn-border); border-radius: 999px; padding: 6px 14px; cursor: pointer;
+  }
+  .filters button:hover { background: var(--btn-hover); }
+  .filters button.active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: bold; }
+
+  .count { text-align: center; color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+
+  .grid { display: flex; flex-direction: column; gap: 10px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--btn-border); border-radius: 10px;
+    padding: 14px 16px; box-shadow: 0 2px 6px var(--shadow);
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; justify-content: space-between; }
+  .card-title { font-size: 17px; color: var(--ink); }
+  .card-title a { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--muted); }
+  .card-title a:hover { color: var(--accent); border-color: var(--accent); }
+  .badges { display: flex; gap: 6px; flex-shrink: 0; }
+  .badge {
+    font-size: 11px; letter-spacing: .3px; text-transform: uppercase;
+    padding: 3px 9px; border-radius: 999px; color: #fff; white-space: nowrap;
+  }
+  .badge.single { background: var(--pill-single); }
+  .badge.giant { background: var(--pill-giant); }
+
+  .meta { color: var(--muted); font-size: 13px; }
+
+  audio { width: 100%; height: 34px; }
+  audio::-webkit-media-controls-panel { background: var(--panel-hi); }
+
+  footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 30px; }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Picrossweeper Music Library</h1>
+  <div class="sub">Background tracks used across <a href="../index.html">Single</a> and <a href="../giant.html">Giant</a> puzzle pages — all streamed live from <a href="https://commons.wikimedia.org/" target="_blank" rel="noopener">Wikimedia Commons</a>.</div>
+
+  <div class="filters" id="filters"></div>
+  <div class="count" id="count"></div>
+  <div class="grid" id="grid"></div>
+
+  <footer>Audio is streamed directly from Wikimedia Commons and may take a moment to buffer.</footer>
+</div>
+
+<script>
+// pages: which puzzle page(s) currently include this track — kept in sync by hand with index.html / giant.html
+const TRACKS = [
+  // — single puzzle page only —
+  { title: 'Canon in D (piano) — Johann Pachelbel', by: 'Lee Galloway · CC BY-SA 3.0',
+    page: "https://commons.wikimedia.org/wiki/File:Pachelbel's_Canon.ogg",
+    src: 'https://upload.wikimedia.org/wikipedia/commons/6/62/Pachelbel%27s_Canon.ogg',
+    pages: ['single'] },
+  { title: 'Air on the G String — J. S. Bach', by: 'US Air Force Strings · public domain',
+    page: 'https://commons.wikimedia.org/wiki/File:Air.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/5/55/Air.ogg',
+    pages: ['single'] },
+  { title: 'Nocturne in E♭ major, Op. 9 No. 2 — Frédéric Chopin', by: 'Beeswaxcandle & Londonjackbooks · CC BY-SA 3.0',
+    page: 'https://commons.wikimedia.org/wiki/File:Chopin_Nocturne_Op_9_No_2.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Chopin_Nocturne_Op_9_No_2.ogg',
+    pages: ['single'] },
+  // — The Four Seasons — Antonio Vivaldi (John Harrison violin) —
+  { title: 'Spring, 1st movement (The Four Seasons) — Antonio Vivaldi', by: 'John Harrison · CC BY-SA',
+    page: 'https://commons.wikimedia.org/wiki/File:Vivaldi_-_Four_Seasons_1_Spring_mvt_1_Allegro_-_John_Harrison_violin.oga',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/f/ff/Vivaldi_-_Four_Seasons_1_Spring_mvt_1_Allegro_-_John_Harrison_violin.oga',
+    pages: ['single'] },
+  { title: 'Autumn, 1st movement (The Four Seasons) — Antonio Vivaldi', by: 'John Harrison · CC BY-SA',
+    page: 'https://commons.wikimedia.org/wiki/File:Vivaldi_-_Four_Seasons_3_Autumn_mvt_1_Allegro_-_John_Harrison_violin.oga',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/0/0f/Vivaldi_-_Four_Seasons_3_Autumn_mvt_1_Allegro_-_John_Harrison_violin.oga',
+    pages: ['single'] },
+  { title: 'Winter, 1st movement (The Four Seasons) — Antonio Vivaldi', by: 'John Harrison · CC BY-SA 4.0',
+    page: 'https://commons.wikimedia.org/wiki/File:Vivaldi_-_Four_Seasons_4_Winter_mvt_1_Allegro_non_molto_-_John_Harrison_violin.oga',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/2/2a/Vivaldi_-_Four_Seasons_4_Winter_mvt_1_Allegro_non_molto_-_John_Harrison_violin.oga',
+    pages: ['single'] },
+  { title: 'Morning Mood (Peer Gynt Suite No. 1) — Edvard Grieg', by: 'Musopen Symphony · public domain',
+    page: 'https://commons.wikimedia.org/wiki/File:Musopen_-_Morning.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/1/1a/Musopen_-_Morning.ogg',
+    pages: ['single'] },
+  { title: 'Eine kleine Nachtmusik, 1st movement — Wolfgang Amadeus Mozart', by: 'Advent Chamber Orchestra · CC BY-SA 2.0',
+    page: 'https://commons.wikimedia.org/wiki/File:Mozart_-_Eine_kleine_Nachtmusik_-_1._Allegro.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/2/24/Mozart_-_Eine_kleine_Nachtmusik_-_1._Allegro.ogg',
+    pages: ['single'] },
+  { title: 'Symphony No. 40 in G minor, 1st movement — Wolfgang Amadeus Mozart', by: 'Fulda Symphonic Orchestra · Open Audio License',
+    page: 'https://commons.wikimedia.org/wiki/File:Wolfgang_Amadeus_Mozart_-_Symphony_40_g-moll_-_1._Molto_allegro.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/9/99/Wolfgang_Amadeus_Mozart_-_Symphony_40_g-moll_-_1._Molto_allegro.ogg',
+    pages: ['single'] },
+  { title: 'The Blue Danube (An der schönen blauen Donau) — Johann Strauss II', by: 'European Archive (Musopen) · CC0',
+    page: 'https://commons.wikimedia.org/wiki/File:Strauss,_An_der_sch%C3%B6nen_blauen_Donau.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/9/91/Strauss%2C_An_der_sch%C3%B6nen_blauen_Donau.ogg',
+    pages: ['single'] },
+  // — giant puzzle page only —
+  { title: 'Canon in D (guitar) — Johann Pachelbel', by: 'Aitua · CC BY-SA 4.0',
+    page: 'https://commons.wikimedia.org/wiki/File:Pachelbel_-_Canon_in_D_major,_P._37_(Guitar).ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/a/ae/Pachelbel_-_Canon_in_D_major%2C_P._37_%28Guitar%29.ogg',
+    pages: ['giant'] },
+  { title: 'Gymnopédie No. 1 — Erik Satie', by: 'Kevin MacLeod · CC BY 3.0',
+    page: 'https://commons.wikimedia.org/wiki/File:Gymnopedie_No._1_(ISRC_USUAN1100787).mp3',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/2/2a/Gymnopedie_No._1_%28ISRC_USUAN1100787%29.mp3',
+    pages: ['giant'] },
+  { title: 'Gnossienne No. 1 — Erik Satie', by: 'La Pianista · public domain',
+    page: 'https://commons.wikimedia.org/wiki/File:Satie_-_Gnossienne_1.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/9/91/Satie_-_Gnossienne_1.ogg',
+    pages: ['giant'] },
+  { title: 'Nocturne in C♯ minor, Op. posth. — Frédéric Chopin', by: 'CC BY 3.0',
+    page: 'https://commons.wikimedia.org/wiki/File:Chopin,_Nocturne_in_C-sharp_minor,_Op._Posth.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/1/12/Chopin%2C_Nocturne_in_C-sharp_minor%2C_Op._Posth.ogg',
+    pages: ['giant'] },
+  { title: 'Clair de lune — Claude Debussy', by: 'public domain',
+    page: 'https://commons.wikimedia.org/wiki/File:Clair_de_lune_(Claude_Debussy)_Suite_bergamasque.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/b/be/Clair_de_lune_%28Claude_Debussy%29_Suite_bergamasque.ogg',
+    pages: ['giant'] },
+  { title: 'Cello Suite No. 1, Prélude — J. S. Bach', by: 'public domain',
+    page: 'https://commons.wikimedia.org/wiki/File:Bach_-_Cello_Suite_no._1_in_G_major,_BWV_1007_-_I._Pr%C3%A9lude.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/9/9d/Bach_-_Cello_Suite_no._1_in_G_major%2C_BWV_1007_-_I._Pr%C3%A9lude.ogg',
+    pages: ['giant'] },
+  { title: 'Violin Sonata No. 1, Adagio — J. S. Bach', by: 'CC0',
+    page: 'https://commons.wikimedia.org/wiki/File:J._S._Bach_%E2%80%93_Violin_Sonata_No.1_in_G_minor,_BWV_1001,_I._Adagio.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/8/8f/J._S._Bach_%E2%80%93_Violin_Sonata_No.1_in_G_minor%2C_BWV_1001%2C_I._Adagio.ogg',
+    pages: ['giant'] },
+  { title: 'Recuerdos de la Alhambra — Francisco Tárrega', by: 'Carlo Alberto Boni · CC BY-SA 3.0',
+    page: 'https://commons.wikimedia.org/wiki/File:Recuerdos_de_la_Alhambra.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/a/a3/Recuerdos_de_la_Alhambra.ogg',
+    pages: ['giant'] },
+  { title: 'Balletto “Il conte Orlando” — Respighi after Molinaro (1599)', by: 'US Marine Band · public domain',
+    page: 'https://commons.wikimedia.org/wiki/File:Balletto_detto_Il_conte_Orlando.ogg',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/1/17/Balletto_detto_Il_conte_Orlando.ogg',
+    pages: ['giant'] },
+  { title: 'Lute piece from Bosch’s “Garden of Earthly Delights”', by: 'panimetal7 · CC BY 3.0',
+    page: 'https://commons.wikimedia.org/wiki/File:Butt_Music_-_Hieronymus_Bosch_(Lute).opus',
+    src: 'https://upload.wikimedia.org/wikipedia/commons/3/32/Butt_Music_-_Hieronymus_Bosch_%28Lute%29.opus',
+    pages: ['giant'] },
+];
+
+const PAGE_LABEL = { single: 'Single', giant: 'Giant' };
+let filter = 'all';
+
+function matches(t) {
+  if (filter === 'all') return true;
+  return t.pages.includes(filter);
+}
+
+function render() {
+  const grid = document.getElementById('grid');
+  const shown = TRACKS.filter(matches);
+  document.getElementById('count').textContent =
+    `${shown.length} track${shown.length === 1 ? '' : 's'}`;
+  grid.innerHTML = shown.map(t => `
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title"><a href="${t.page}" target="_blank" rel="noopener">${t.title}</a></div>
+        <div class="badges">${t.pages.map(p => `<span class="badge ${p}">${PAGE_LABEL[p]}</span>`).join('')}</div>
+      </div>
+      <div class="meta">${t.by}</div>
+      <audio controls preload="none" src="${t.src}"></audio>
+    </div>
+  `).join('');
+}
+
+function renderFilters() {
+  const opts = [
+    { id: 'all', label: 'All tracks' },
+    { id: 'single', label: 'Single puzzle' },
+    { id: 'giant', label: 'Giant puzzle' },
+  ];
+  document.getElementById('filters').innerHTML = opts.map(o =>
+    `<button data-f="${o.id}" class="${o.id === filter ? 'active' : ''}">${o.label}</button>`
+  ).join('');
+  document.querySelectorAll('#filters button').forEach(btn => {
+    btn.onclick = () => { filter = btn.dataset.f; renderFilters(); render(); };
+  });
+}
+
+renderFilters();
+render();
+</script>
+</body>
+</html>
