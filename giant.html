@@ -334,15 +334,19 @@ function solve(nb, clues, initial, maxSteps = Infinity) {
 }
 
 // Difficulty presets. keep = chance a redundant clue survives pruning; R = blur radius of the local-contrast
-// threshold; texture = strength of error-diffusion dithering (0 = plain threshold, 1 = full halftone), which
-// breaks flat areas into detail so far fewer clues are trivial 0/9s; avoidExtremes = prefer informative
-// 1–8 clues when placing, and prune 0/9 clues first.
+// threshold; local = how much of the threshold comes from the local mean rather than the picture's overall
+// mean (towards 1 every neighbourhood ends up mixed, so broad flat expanses of one colour disappear);
+// texture = strength of error-diffusion dithering, which turns what flatness remains into a halftone;
+// avoidExtremes = prefer informative 1–8 clues when placing, and prune 0/9 clues first.
 const DIFFICULTY = {
-  relaxed: { keep: 0.8,  R: 4, texture: 0,    avoidExtremes: false },
-  normal:  { keep: 0.45, R: 4, texture: 0.25, avoidExtremes: true },
-  hard:    { keep: 0.15, R: 3, texture: 0.5,  avoidExtremes: true },
-  expert:  { keep: 0,    R: 3, texture: 0.8,  avoidExtremes: true },
+  relaxed: { keep: 0.8,  R: 4, local: 0.85, texture: 0.25, avoidExtremes: false },
+  normal:  { keep: 0.45, R: 4, local: 0.90, texture: 0.35, avoidExtremes: true },
+  hard:    { keep: 0.15, R: 3, local: 0.95, texture: 0.55, avoidExtremes: true },
+  expert:  { keep: 0,    R: 3, local: 1.00, texture: 0.80, avoidExtremes: true },
 };
+// Largest run of tiles whose 3×3 blocks are all one colour that we leave alone. Such tiles can only ever
+// carry a 0 or a "block full" clue, so a big expanse of them is a chore with nothing to deduce.
+const FLAT_CAP = 100;
 
 // Deterministic (seeded) generator: adds clues until logic alone solves the region, then prunes.
 // Irregular regions can contain "twin" tiles whose neighbourhoods are identical, which no clue set can
@@ -478,12 +482,13 @@ function buildGame(img, key, totalTiles, diffName) {
   // at 0 flat areas stay flat (many trivial clues); towards 1 they become a halftone of the painting.
   const target = new Uint8Array(N), err = new Float32Array(N);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const i = y * W + x, thr = 0.55 * blur[i] + 0.45 * globalMean, v = lum[i] + err[i];
+    const i = y * W + x, thr = diff.local * blur[i] + (1 - diff.local) * globalMean, v = lum[i] + err[i];
     const on = v > thr ? 1 : 0; target[i] = on;
     const e = (v - (on ? thr + 60 : thr - 60)) * diff.texture;
     if (x + 1 < W) err[i + 1] += e * 7 / 16;
     if (y + 1 < H) { if (x > 0) err[i + W - 1] += e * 3 / 16; err[i + W] += e * 5 / 16; if (x + 1 < W) err[i + W + 1] += e / 16; }
   }
+  breakUpFlats(target, W, H, FLAT_CAP);   // a picture with genuinely blank areas still gets some detail
 
   // Cut the grid into organic regions (deterministic for this picture + size).
   const { id: rid, count } = partition(W, H, mulberry32(hashStr(`${key}:${W}x${H}:regions`)));
@@ -557,6 +562,41 @@ function boxBlur(src, W, H, R) {
   return out;
 }
 
+// A tile is "flat" when every tile in its 3×3 block matches it: nothing there can be deduced, only
+// read off a 0 or a full-block clue. Where such tiles form a run larger than `cap` — a blank sky, an
+// empty background in an uploaded image — flip a 1-in-9 lattice inside it. Every 3×3 block in the run
+// then contains a flipped tile, so the whole expanse turns into clues worth reading. Deterministic:
+// the lattice is fixed, so a picture always cuts up the same way.
+function breakUpFlats(target, W, H, cap) {
+  const N = W * H, flat = new Uint8Array(N);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x; let same = true;
+    for (let dy = -1; dy <= 1 && same; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const yy = y + dy, xx = x + dx;
+      if (yy < 0 || yy >= H || xx < 0 || xx >= W) continue;
+      if (target[yy * W + xx] !== target[i]) { same = false; break; }
+    }
+    flat[i] = same ? 1 : 0;
+  }
+  const seen = new Uint8Array(N), stack = [], comp = [];
+  let flips = 0;
+  for (let s = 0; s < N; s++) {
+    if (!flat[s] || seen[s]) continue;
+    stack.length = 0; comp.length = 0; stack.push(s); seen[s] = 1;
+    while (stack.length) {                                  // 4-connected run of flat tiles
+      const i = stack.pop(); comp.push(i);
+      const x = i % W, y = (i / W) | 0;
+      if (x > 0)     { const j = i - 1; if (flat[j] && !seen[j]) { seen[j] = 1; stack.push(j); } }
+      if (x + 1 < W) { const j = i + 1; if (flat[j] && !seen[j]) { seen[j] = 1; stack.push(j); } }
+      if (y > 0)     { const j = i - W; if (flat[j] && !seen[j]) { seen[j] = 1; stack.push(j); } }
+      if (y + 1 < H) { const j = i + W; if (flat[j] && !seen[j]) { seen[j] = 1; stack.push(j); } }
+    }
+    if (comp.length <= cap) continue;
+    for (const i of comp) if ((i % W) % 3 === 1 && (((i / W) | 0) % 3 === 1)) { target[i] ^= 1; flips++; }
+  }
+  return flips;
+}
+
 // ---------- region helpers ----------
 const regionOf = g => G.rid[g];
 const regionCells = r => G.reg[r].cells;
@@ -611,7 +651,9 @@ function saveProgressSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(sa
 function saveProgress() {
   try { localStorage.setItem(saveKey(), btoa(String.fromCharCode(...G.marks))); } catch {}
 }
-const saveKey = () => `pw.save.v3.${G.key}.${G.W}x${G.H}.${G.diffName}`;
+// v4: the two-tone pattern changed (more locally-adaptive threshold + flat-area break-up), so marks
+// saved against the old pattern would read as mistakes. Old v3 saves are simply not picked up.
+const saveKey = () => `pw.save.v4.${G.key}.${G.W}x${G.H}.${G.diffName}`;
 function loadProgress() {
   try {
     const s = localStorage.getItem(saveKey()); if (!s) return;
