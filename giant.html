@@ -458,7 +458,8 @@ themeSel.onchange = () => applyTheme(themeSel.value);
 let G = null;            // the giant grid
 let history = [];
 let tapMode = LIGHT, panTool = false, spaceHeld = false;
-let wrongSet = new Set(), hinted = -1, currentRegion = 0;
+let wrongSet = new Set(), hinted = -1, hintAt = 0, currentRegion = 0;
+const HINT_PULSE_MS = 900, HINT_PULSES = 3;   // matches the single-puzzle board's CSS pulse
 const view = { scale: 8, ox: 0, oy: 0 };
 
 // Build the grid from a loaded image.
@@ -746,7 +747,6 @@ function draw() {
   if (s >= 4) {
     ctx.lineWidth = Math.max(2, s * 0.15); ctx.strokeStyle = C.bad;
     for (const g of wrongSet) ctx.strokeRect(sx(g % G.W) + 1, sy((g / G.W) | 0) + 1, s - 2, s - 2);
-    if (hinted >= 0) { ctx.strokeStyle = C.accent; ctx.strokeRect(sx(hinted % G.W) + 1, sy((hinted / G.W) | 0) + 1, s - 2, s - 2); }
     // current region outline, traced along its true edge
     const rid = G.rid, W = G.W, H = G.H, cr = currentRegion;
     ctx.strokeStyle = C.accent; ctx.lineWidth = 2.5; ctx.globalAlpha = .9; ctx.beginPath();
@@ -758,6 +758,22 @@ function draw() {
       if (y === 0 || rid[g - W] !== cr) { ctx.moveTo(sx(x), sy(y)); ctx.lineTo(sx(x + 1), sy(y)); }
     }
     ctx.stroke(); ctx.globalAlpha = 1;
+
+    // Hinted tile, drawn last so it sits above the region outline. Same beat as the single-puzzle
+    // board's CSS pulse: a ring that swells out of the tile edge and back, three times over.
+    if (hinted >= 0) {
+      const k = Math.sin(Math.PI * (((performance.now() - hintAt) / HINT_PULSE_MS) % 1));
+      const w = Math.max(3, s * 0.22) * k;
+      if (w > 0.4) {
+        ctx.lineWidth = w; ctx.strokeStyle = C.accent;
+        ctx.strokeRect(sx(hinted % G.W) - w / 2, sy((hinted / G.W) | 0) - w / 2, s + w, s + w);
+      }
+    }
+  }
+  // Keep animating until the three pulses are done, then leave the tile looking like any other.
+  if (hinted >= 0) {
+    if (performance.now() - hintAt >= HINT_PULSE_MS * HINT_PULSES) hinted = -1;
+    else requestDraw();
   }
   drawMinimap();
 }
@@ -882,7 +898,7 @@ $('hintBtn').onclick = () => {
   for (let i = 0; i < base.length; i++) if (base[i] !== UNK && (base[i] === LIGHT) !== (t[i] === 1)) base[i] = UNK;   // ignore wrong marks
   const { state } = solve(G.reg[r].nb, clues, base, 1);
   for (let i = 0; i < state.length; i++) if (state[i] !== UNK && G.marks[cellsG[i]] !== state[i]) {
-    setMark(cellsG[i], state[i]); hinted = cellsG[i]; setStatus(`<b>Hint:</b> one tile deduced in region ${r + 1}`); requestDraw(); return;
+    setMark(cellsG[i], state[i]); hinted = cellsG[i]; hintAt = performance.now(); setStatus(`<b>Hint:</b> one tile deduced in region ${r + 1}`); requestDraw(); return;
   }
   setStatus('<b>No safe deduction</b> — fix a mistake first (try Check)', 'bad');
 };
