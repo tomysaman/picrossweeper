@@ -614,6 +614,7 @@ document.getElementById('undoBtn').onclick = () => {
 };
 document.getElementById('clearBtn').onclick = () => {
   if (won) return;
+  if (!confirm('Clear all marks?')) return;
   marks.fill(UNK); history = []; refresh(); setStatus('');
 };
 document.getElementById('checkBtn').onclick = () => {

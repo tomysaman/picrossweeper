@@ -875,11 +875,13 @@ modeBtn.onclick = () => { tapMode = tapMode === LIGHT ? DARK : LIGHT; modeBtn.te
 $('helpBtn').onclick = () => { $('help').hidden = !$('help').hidden; };
 $('clearBtn').onclick = () => {
   if (!G || G.done[currentRegion]) return;
+  if (!confirm(`Clear all marks in region ${currentRegion + 1}?`)) return;
   for (const g of regionCells(currentRegion)) setMark(g, UNK);
   wrongSet.clear(); updateStatus();
 };
 $('resetBtn').onclick = () => {
   if (!G) return;
+  if (!confirm('Erase all saved progress for this picture?')) return;
   G.marks.fill(UNK); G.done.fill(0); history = []; wrongSet.clear(); hinted = -1;
   try { localStorage.removeItem(saveKey()); } catch {}
   repaintAll(); requestDraw(); updateStatus();
