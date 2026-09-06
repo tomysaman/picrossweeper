@@ -185,7 +185,7 @@
     Every region is solvable by pure logic.<br>
     <span class="sw" style="background:var(--light)"></span>Left‑click / drag: light &nbsp;
     <span class="sw" style="background:var(--dark)"></span>Right‑click / drag: dark &nbsp; click again: clear<br>
-    <b>Move around:</b> mouse wheel zooms · middle‑drag, <kbd>Space</kbd>+drag or the ✋ tool pans · arrows pan · <kbd>F</kbd> fits · pinch on touch · click the minimap to jump.<br>
+    <b>Move around:</b> mouse wheel zooms · middle‑drag, <kbd>Space</kbd>+drag or the ✋ tool pans · arrows or <kbd>WASD</kbd> pan · <kbd>F</kbd> fits · pinch on touch · click the minimap to jump.<br>
     <b>Keys:</b> <kbd>Ctrl+Z</kbd> undo · <kbd>X</kbd> tap colour · <kbd>M</kbd> music · <kbd>?</kbd> this panel.<br>
     Progress is saved automatically in this browser, per picture. Choose “Your own image…” to play any wallpaper.
   </div>
@@ -794,10 +794,10 @@ document.addEventListener('keydown', e => {
   if (e.key === '+' || e.key === '=') zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, 1.25);
   if (e.key === '-') zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, 0.8);
   const step = 80;
-  if (e.key === 'ArrowLeft') { view.ox += step; clampView(); requestDraw(); }
-  if (e.key === 'ArrowRight') { view.ox -= step; clampView(); requestDraw(); }
-  if (e.key === 'ArrowUp') { view.oy += step; clampView(); requestDraw(); }
-  if (e.key === 'ArrowDown') { view.oy -= step; clampView(); requestDraw(); }
+  if (e.key === 'ArrowLeft' || e.key === 'a') { view.ox += step; clampView(); requestDraw(); }
+  if (e.key === 'ArrowRight' || e.key === 'd') { view.ox -= step; clampView(); requestDraw(); }
+  if (e.key === 'ArrowUp' || e.key === 'w') { view.oy += step; clampView(); requestDraw(); }
+  if (e.key === 'ArrowDown' || e.key === 's') { view.oy -= step; clampView(); requestDraw(); }
 });
 document.addEventListener('keyup', e => { if (e.code === 'Space') { spaceHeld = false; canvas.classList.toggle('panning', panTool); } });
 
