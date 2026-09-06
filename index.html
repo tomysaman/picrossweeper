@@ -5,21 +5,66 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Picrossweeper</title>
 <style>
-  :root {
+  /* ---------- Themes: every colour lives here; switch with <html data-theme="…"> ---------- */
+  :root, :root[data-theme="tavern"] {
+    /* "Tavern" — the original warm-wood look */
     --bg: #2b2620;
     --panel: #3a332b;
     --ink: #f1e7d0;
     --muted: #b9ad94;
+    --footer: #7d7160;
+    --btn: #4b4238;
+    --btn-border: #6a5e50;
+    --btn-hover: #5a5045;
+    --accent: #d9a441;
+    --accent-hover: #e6b556;
+    --on-accent: #2b2620;
     --unknown: #6b6052;
-    --unknown-hover: #7d7160;
     --light: #f3e4b8;
     --dark: #1c2a3a;
-    --clue-on-light: #3a2e14;
+    --light-won: #f7e9bf;
+    --dark-won: #16202c;
+    --x-mark: #4c5f78;
+    --clue-on-light: #000000;
     --clue-on-dark: #e8dcbf;
     --clue-on-unknown: #f7efdc;
-    --accent: #d9a441;
+    /* digit colours once every tile around the clue has been marked (tile colour never changes) */
+    --clue-done-on-light: #7a7a7a;
+    --clue-done-on-dark: #5c6a7a;
+    --clue-done-on-unknown: #877b69;
     --bad: #c9503f;
     --good: #7fb069;
+    --shadow: rgba(0,0,0,.4);
+  }
+  :root[data-theme="proverbs"] {
+    /* "Proverbs" — exact values from proverbsgame.com:
+       bgd #242746 · mid #294D5C · highlight #F78E55 · accent #733840 · text #FFFFFF */
+    --bg: #242746;
+    --panel: #294d5c;
+    --ink: #ffffff;
+    --muted: rgba(255,255,255,.72);
+    --footer: rgba(255,255,255,.45);
+    --btn: #242746;
+    --btn-border: #733840;
+    --btn-hover: #2f3358;
+    --accent: #f78e55;
+    --accent-hover: #f9a273;
+    --on-accent: #242746;
+    --unknown: #2c305c;          /* the in-game grid navy */
+    --light: #f78e55;            /* light tiles are the orange highlight */
+    --dark: #733840;             /* dark tiles are the site's red accent */
+    --light-won: #f78e55;
+    --dark-won: #733840;
+    --x-mark: #a8555f;
+    --clue-on-light: #000000;
+    --clue-on-dark: #ffffff;
+    --clue-on-unknown: #ffffff;
+    --clue-done-on-light: #8a8a8a;
+    --clue-done-on-dark: #b08a8e;
+    --clue-done-on-unknown: #6d719a;
+    --bad: #733840;
+    --good: #f78e55;
+    --shadow: rgba(0,0,0,.45);
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
@@ -44,15 +89,15 @@
   .toolbar label { color: var(--muted); font-size: 13px; }
   select, button {
     font: inherit; font-size: 14px;
-    background: #4b4238; color: var(--ink);
-    border: 1px solid #6a5e50; border-radius: 6px; padding: 6px 12px; cursor: pointer;
+    background: var(--btn); color: var(--ink);
+    border: 1px solid var(--btn-border); border-radius: 6px; padding: 6px 12px; cursor: pointer;
   }
-  button:hover, select:hover { background: #5a5045; }
-  button.primary { background: var(--accent); color: #2b2620; border-color: var(--accent); font-weight: bold; }
-  button.primary:hover { background: #e6b556; }
+  button:hover, select:hover { background: var(--btn-hover); }
+  button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: bold; }
+  button.primary:hover { background: var(--accent-hover); }
   button.active { outline: 2px solid var(--accent); }
 
-  .music { display: inline-flex; gap: 6px; align-items: center; padding-left: 10px; border-left: 1px solid #5a5045; }
+  .music, .theme { display: inline-flex; gap: 6px; align-items: center; padding-left: 10px; border-left: 1px solid var(--btn-border); }
   .music input[type=range] { width: 80px; accent-color: var(--accent); }
   .now-playing { color: var(--muted); font-size: 12px; font-style: italic; min-height: 16px; text-align: center; }
   .now-playing a { color: inherit; }
@@ -62,7 +107,7 @@
   .status.win { color: var(--good); font-size: 18px; }
   .status.bad { color: var(--bad); }
 
-  #boardWrap { padding: 10px; background: var(--panel); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+  #boardWrap { padding: 10px; background: var(--panel); border-radius: 12px; box-shadow: 0 10px 30px var(--shadow); }
   #board {
     display: grid;
     gap: 2px;
@@ -85,19 +130,22 @@
   .cell.dark::after {
     content: ""; position: absolute; inset: 30%;
     background:
-      linear-gradient(45deg, transparent 44%, #4c5f78 44%, #4c5f78 56%, transparent 56%),
-      linear-gradient(-45deg, transparent 44%, #4c5f78 44%, #4c5f78 56%, transparent 56%);
+      linear-gradient(45deg, transparent 44%, var(--x-mark) 44%, var(--x-mark) 56%, transparent 56%),
+      linear-gradient(-45deg, transparent 44%, var(--x-mark) 44%, var(--x-mark) 56%, transparent 56%);
     opacity: .9;
   }
   .cell.dark.clue::after { display: none; }
   .cell.wrong { box-shadow: inset 0 0 0 3px var(--bad); }
-  .cell.satisfied { opacity: .55; }
+  /* All surrounding tiles marked: only the digit changes, the tile colour stays as-is. */
+  .cell.satisfied        { color: var(--clue-done-on-unknown); }
+  .cell.satisfied.light  { color: var(--clue-done-on-light); }
+  .cell.satisfied.dark   { color: var(--clue-done-on-dark); }
   .cell.hinted { animation: pulse .9s ease-in-out 3; }
   @keyframes pulse { 50% { box-shadow: 0 0 0 4px var(--accent); } }
 
-  #board.won .cell { cursor: default; opacity: 1; }
-  #board.won .cell.light { background: #f7e9bf; }
-  #board.won .cell.dark  { background: #16202c; }
+  #board.won .cell { cursor: default; }
+  #board.won .cell.light { background: var(--light-won); }
+  #board.won .cell.dark  { background: var(--dark-won); }
   #board.won .cell.dark::after { display: none; }
   #board.won .cell.clue { color: transparent; }
 
@@ -105,7 +153,8 @@
   .help b { color: var(--ink); }
   .legend { display: inline-flex; gap: 14px; align-items: center; margin-top: 4px; }
   .sw { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; }
-  footer { color: #7d7160; font-size: 12px; margin-top: auto; }
+  footer { color: var(--footer); font-size: 12px; margin-top: auto; }
+  footer a { color: inherit; }
 </style>
 </head>
 <body>
@@ -138,6 +187,14 @@
   <button id="undoBtn">Undo</button>
   <button id="clearBtn">Clear</button>
   <button id="modeBtn" title="Tap mode for touch: which colour a tap paints">Tap: ☀ light</button>
+  <span class="theme">
+    <label>Theme
+      <select id="theme">
+        <option value="tavern">Tavern</option>
+        <option value="proverbs">Proverbs</option>
+      </select>
+    </label>
+  </span>
   <span class="music">
     <button id="musicBtn" title="Play / pause background music (M)">♪ Play</button>
     <button id="nextBtn" title="Next track">⏭</button>
@@ -159,7 +216,7 @@
     <span><span class="sw" style="background:var(--dark)"></span>Right‑click / drag: dark</span>
     <span><span class="sw" style="background:var(--unknown)"></span>Click again: clear</span>
   </div>
-  <div>Numbers fade once their 3×3 block is fully satisfied. Every puzzle is generated to be solvable by pure logic — no guessing needed.</div>
+  <div>A number turns grey once every tile in its 3×3 block has been marked. Every puzzle is generated to be solvable by pure logic — no guessing needed.</div>
   <div>Keys: <b>N</b> new puzzle · <b>Ctrl+Z</b> undo · <b>X</b> tap colour · <b>M</b> music. Music starts on your first click on the board.</div>
 </div>
 
@@ -470,9 +527,8 @@ function refresh() {
     d.classList.toggle('dark', marks[i] === DARK);
     d.classList.remove('wrong');
     if (clues[i] >= 0) {
-      let lit = 0, unk = 0;
-      for (const j of nb[i]) { if (marks[j] === LIGHT) lit++; else if (marks[j] === UNK) unk++; }
-      d.classList.toggle('satisfied', unk === 0 && lit === clues[i]);
+      // "Done" = every tile in the 3×3 block has been marked (regardless of correctness).
+      d.classList.toggle('satisfied', nb[i].every(j => marks[j] !== UNK));
     }
   }
   checkWin();
@@ -567,6 +623,17 @@ modeBtn.onclick = () => {
   tapMode = tapMode === LIGHT ? DARK : LIGHT;
   modeBtn.textContent = tapMode === LIGHT ? 'Tap: ☀ light' : 'Tap: ✕ dark';
 };
+// ---------- Themes ----------
+const themeSel = document.getElementById('theme');
+function applyTheme(name) {
+  if (![...themeSel.options].some(o => o.value === name)) name = 'tavern';
+  document.documentElement.dataset.theme = name;
+  themeSel.value = name;
+  try { localStorage.setItem('pw.theme', name); } catch {}
+}
+themeSel.onchange = () => applyTheme(themeSel.value);
+{ let saved = null; try { saved = localStorage.getItem('pw.theme'); } catch {} applyTheme(saved || 'tavern'); }
+
 // ---------- Background music (streamed from Wikimedia Commons; PD / CC BY 3.0) ----------
 const TRACKS = [
   { title: 'Balletto detto “Il conte Orlando” — Respighi after Molinaro (1599)', by: 'US Marine Band · public domain',
