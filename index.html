@@ -87,12 +87,13 @@
     background: var(--panel); padding: 10px 14px; border-radius: 10px;
   }
   .toolbar label { color: var(--muted); font-size: 13px; }
-  select, button {
+  select, button, a.btnlink {
     font: inherit; font-size: 14px;
     background: var(--btn); color: var(--ink);
     border: 1px solid var(--btn-border); border-radius: 6px; padding: 6px 12px; cursor: pointer;
   }
-  button:hover, select:hover { background: var(--btn-hover); }
+  a.btnlink { text-decoration: none; }
+  button:hover, select:hover, a.btnlink:hover { background: var(--btn-hover); }
   button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: bold; }
   button.primary:hover { background: var(--accent-hover); }
   button.active { outline: 2px solid var(--accent); }
@@ -188,6 +189,7 @@
   <button id="undoBtn">Undo</button>
   <button id="clearBtn">Clear</button>
   <button id="modeBtn" title="Tap mode for touch: which colour a tap paints">Tap: ☀ light</button>
+  <a class="btnlink" href="tutorial.html" title="Visual tutorial: the rule, every number 0–9, and how to solve">? How to play</a>
   <span class="theme">
     <label>Theme
       <select id="theme">
