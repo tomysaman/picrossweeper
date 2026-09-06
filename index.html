@@ -79,21 +79,27 @@
     gap: 14px;
     user-select: none;
   }
-  h1 { margin: 0; font-size: 26px; letter-spacing: 1px; color: var(--accent); font-weight: normal; }
+  h1 { margin: 0; font-size: 26px; letter-spacing: 1px; color: var(--accent); font-weight: normal;
+       max-width: 100%; text-align: center; }
   h1 small { color: var(--muted); font-size: 13px; margin-left: 10px; letter-spacing: 0; }
+  h1 .howto {
+    font-size: 13px; letter-spacing: 0; margin-left: 14px; vertical-align: 6px;
+    color: var(--muted); text-decoration: none;
+    background: var(--btn); border: 1px solid var(--btn-border); border-radius: 999px; padding: 3px 11px;
+  }
+  h1 .howto:hover { color: var(--ink); background: var(--btn-hover); border-color: var(--accent); }
 
   .toolbar {
     display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center;
     background: var(--panel); padding: 10px 14px; border-radius: 10px;
   }
   .toolbar label { color: var(--muted); font-size: 13px; }
-  select, button, a.btnlink {
+  select, button {
     font: inherit; font-size: 14px;
     background: var(--btn); color: var(--ink);
     border: 1px solid var(--btn-border); border-radius: 6px; padding: 6px 12px; cursor: pointer;
   }
-  a.btnlink { text-decoration: none; }
-  button:hover, select:hover, a.btnlink:hover { background: var(--btn-hover); }
+  button:hover, select:hover { background: var(--btn-hover); }
   button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: bold; }
   button.primary:hover { background: var(--accent-hover); }
   button.active { outline: 2px solid var(--accent); }
@@ -160,7 +166,7 @@
 </head>
 <body>
 
-<h1>Picrossweeper <small>a picross × minesweeper puzzle</small></h1>
+<h1>Picrossweeper <small>a picross × minesweeper puzzle</small><a class="howto" href="tutorial.html" title="Visual tutorial: the rule, every number 0–9, and how to solve">? How to play</a></h1>
 
 <div class="toolbar">
   <label>Picture
@@ -189,7 +195,6 @@
   <button id="undoBtn">Undo</button>
   <button id="clearBtn">Clear</button>
   <button id="modeBtn" title="Tap mode for touch: which colour a tap paints">Tap: ☀ light</button>
-  <a class="btnlink" href="tutorial.html" title="Visual tutorial: the rule, every number 0–9, and how to solve">? How to play</a>
   <span class="theme">
     <label>Theme
       <select id="theme">
