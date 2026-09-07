@@ -338,19 +338,19 @@ function solve(nb, clues, initial, maxSteps = Infinity) {
 // Difficulty presets. keep = chance a redundant clue survives pruning; R = blur radius of the local-contrast
 // threshold; local = how much of the threshold comes from the local mean rather than the picture's overall
 // mean (towards 1 every neighbourhood ends up mixed, so broad flat expanses of one colour disappear);
-// texture = strength of error-diffusion dithering. It decides the shape of the clue histogram: with
-// little of it the picture keeps broad light and dark, which produces plenty of 0s, 1s, 8s and 9s;
-// with a lot, every 3x3 block counts out near the middle and the numbers form a bell around 3-4, the
-// way Proverbs' own boards do. It also sets how many clues a region needs, so more of it means a
-// busier board -- these values sit where the two pull evenly;
+// texture = strength of error-diffusion dithering. Turning it up pushes every area towards 50% grey,
+// which makes the clue numbers cluster around 3-4 the way Proverbs' hand-drawn boards do -- but a
+// dithered grey is a repeating pattern, so it also fills the board with dark|light|dark stripes and
+// needs a clue on half the tiles to stay solvable. Kept low: a board that looks like the painting
+// beats a board with a prettier histogram;
 // avoidExtremes = don't bulk-seed a region with 0/9 clues (they can still be added where they help).
 // Lower `local` keeps more of the picture's broad light and dark, which is what makes 0s and 9s exist
 // at all; FLAT_CAP below stops that from turning back into large expanses with nothing to deduce.
 const DIFFICULTY = {
-  relaxed: { keep: 0.8,  R: 4, local: 0.90, texture: 0.40, avoidExtremes: false },
-  normal:  { keep: 0.45, R: 4, local: 0.95, texture: 0.50, avoidExtremes: true },
-  hard:    { keep: 0.15, R: 3, local: 1.00, texture: 0.65, avoidExtremes: true },
-  expert:  { keep: 0,    R: 3, local: 1.00, texture: 0.80, avoidExtremes: true },
+  relaxed: { keep: 0.8,  R: 4, local: 0.65, texture: 0.10, avoidExtremes: false },
+  normal:  { keep: 0.45, R: 4, local: 0.70, texture: 0.15, avoidExtremes: true },
+  hard:    { keep: 0.15, R: 3, local: 0.75, texture: 0.25, avoidExtremes: true },
+  expert:  { keep: 0,    R: 3, local: 0.80, texture: 0.30, avoidExtremes: true },
 };
 // Largest run of tiles whose 3×3 blocks are all one colour that we leave alone. Such tiles can only ever
 // carry a 0 or a "block full" clue, so a big expanse of them is a chore with nothing to deduce.
@@ -529,13 +529,28 @@ function buildGame(img, key, totalTiles, diffName) {
   const blur = boxBlur(lum, W, H, diff.R);
   // Local-contrast threshold, with Floyd–Steinberg error diffusion scaled by the difficulty's texture:
   // at 0 flat areas stay flat (many trivial clues); towards 1 they become a halftone of the painting.
+  // Plain Floyd–Steinberg pushes its error the same way along every row, so an even area comes out as
+  // dark|light|dark|light columns — a stripe, not a picture, and every clue in it counts the same. Two
+  // standard fixes between them break the periodicity: scan alternate rows backwards (serpentine), and
+  // jitter the threshold per tile from a seeded generator so the pattern never locks into a phase.
   const target = new Uint8Array(N), err = new Float32Array(N);
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const i = y * W + x, thr = diff.local * blur[i] + (1 - diff.local) * globalMean, v = lum[i] + err[i];
-    const on = v > thr ? 1 : 0; target[i] = on;
-    const e = (v - (on ? thr + 60 : thr - 60)) * diff.texture;
-    if (x + 1 < W) err[i + 1] += e * 7 / 16;
-    if (y + 1 < H) { if (x > 0) err[i + W - 1] += e * 3 / 16; err[i + W] += e * 5 / 16; if (x + 1 < W) err[i + W + 1] += e / 16; }
+  const jitter = mulberry32(hashStr(`${key}:dither`));
+  for (let y = 0; y < H; y++) {
+    const back = (y & 1) === 1, step = back ? -1 : 1;
+    for (let k = 0; k < W; k++) {
+      const x = back ? W - 1 - k : k, i = y * W + x;
+      const thr = diff.local * blur[i] + (1 - diff.local) * globalMean + (jitter() - 0.5) * 44 * diff.texture;
+      const v = lum[i] + err[i];
+      const on = v > thr ? 1 : 0; target[i] = on;
+      const e = (v - (on ? thr + 60 : thr - 60)) * diff.texture;
+      const ahead = x + step, behind = x - step;
+      if (ahead >= 0 && ahead < W) err[i + step] += e * 7 / 16;
+      if (y + 1 < H) {
+        if (behind >= 0 && behind < W) err[i + W - step] += e * 3 / 16;
+        err[i + W] += e * 5 / 16;
+        if (ahead >= 0 && ahead < W) err[i + W + step] += e / 16;
+      }
+    }
   }
   breakUpFlats(target, W, H, FLAT_CAP);   // a picture with genuinely blank areas still gets some detail
 
@@ -703,7 +718,7 @@ function saveProgress() {
 // v5: the two-tone pattern changes whenever the threshold or flat-area handling does, and marks saved
 // against an older pattern would read as mistakes, so each change takes a new key. Old saves are
 // simply not picked up.
-const saveKey = () => `pw.save.v8.${G.key}.${G.W}x${G.H}.${G.diffName}`;
+const saveKey = () => `pw.save.v9.${G.key}.${G.W}x${G.H}.${G.diffName}`;
 function loadProgress() {
   try {
     const s = localStorage.getItem(saveKey()); if (!s) return;
