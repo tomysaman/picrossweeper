@@ -338,15 +338,17 @@ function solve(nb, clues, initial, maxSteps = Infinity) {
 // Difficulty presets. keep = chance a redundant clue survives pruning; R = blur radius of the local-contrast
 // threshold; local = how much of the threshold comes from the local mean rather than the picture's overall
 // mean (towards 1 every neighbourhood ends up mixed, so broad flat expanses of one colour disappear);
-// texture = strength of error-diffusion dithering, which turns what flatness remains into a halftone;
+// texture = strength of error-diffusion dithering. It was how flat areas got broken up, but a dither
+// is single-tile noise: nothing propagates, so the generator has to clue nearly every tile and every
+// count lands mid-range. FLAT_CAP does that job now, so this stays at 0 except to stiffen Hard/Expert;
 // avoidExtremes = don't bulk-seed a region with 0/9 clues (they can still be added where they help).
 // Lower `local` keeps more of the picture's broad light and dark, which is what makes 0s and 9s exist
 // at all; FLAT_CAP below stops that from turning back into large expanses with nothing to deduce.
 const DIFFICULTY = {
-  relaxed: { keep: 0.8,  R: 4, local: 0.70, texture: 0.25, avoidExtremes: false },
-  normal:  { keep: 0.45, R: 4, local: 0.70, texture: 0.35, avoidExtremes: true },
-  hard:    { keep: 0.15, R: 3, local: 0.80, texture: 0.55, avoidExtremes: true },
-  expert:  { keep: 0,    R: 3, local: 0.90, texture: 0.80, avoidExtremes: true },
+  relaxed: { keep: 0.8,  R: 4, local: 0.70, texture: 0.15, avoidExtremes: false },
+  normal:  { keep: 0.45, R: 4, local: 0.70, texture: 0.15, avoidExtremes: true },
+  hard:    { keep: 0.15, R: 3, local: 0.80, texture: 0.25, avoidExtremes: true },
+  expert:  { keep: 0,    R: 3, local: 0.90, texture: 0.40, avoidExtremes: true },
 };
 // Largest run of tiles whose 3×3 blocks are all one colour that we leave alone. Such tiles can only ever
 // carry a 0 or a "block full" clue, so a big expanse of them is a chore with nothing to deduce.
@@ -699,7 +701,7 @@ function saveProgress() {
 // v5: the two-tone pattern changes whenever the threshold or flat-area handling does, and marks saved
 // against an older pattern would read as mistakes, so each change takes a new key. Old saves are
 // simply not picked up.
-const saveKey = () => `pw.save.v6.${G.key}.${G.W}x${G.H}.${G.diffName}`;
+const saveKey = () => `pw.save.v7.${G.key}.${G.W}x${G.H}.${G.diffName}`;
 function loadProgress() {
   try {
     const s = localStorage.getItem(saveKey()); if (!s) return;
