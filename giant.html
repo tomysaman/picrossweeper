@@ -339,16 +339,18 @@ function solve(nb, clues, initial, maxSteps = Infinity) {
 // threshold; local = how much of the threshold comes from the local mean rather than the picture's overall
 // mean (towards 1 every neighbourhood ends up mixed, so broad flat expanses of one colour disappear);
 // texture = strength of error-diffusion dithering, which turns what flatness remains into a halftone;
-// avoidExtremes = prefer informative 1–8 clues when placing, and prune 0/9 clues first.
+// avoidExtremes = don't bulk-seed a region with 0/9 clues (they can still be added where they help).
+// Lower `local` keeps more of the picture's broad light and dark, which is what makes 0s and 9s exist
+// at all; FLAT_CAP below stops that from turning back into large expanses with nothing to deduce.
 const DIFFICULTY = {
-  relaxed: { keep: 0.8,  R: 4, local: 0.85, texture: 0.25, avoidExtremes: false },
-  normal:  { keep: 0.45, R: 4, local: 0.90, texture: 0.35, avoidExtremes: true },
-  hard:    { keep: 0.15, R: 3, local: 0.95, texture: 0.55, avoidExtremes: true },
-  expert:  { keep: 0,    R: 3, local: 1.00, texture: 0.80, avoidExtremes: true },
+  relaxed: { keep: 0.8,  R: 4, local: 0.70, texture: 0.25, avoidExtremes: false },
+  normal:  { keep: 0.45, R: 4, local: 0.70, texture: 0.35, avoidExtremes: true },
+  hard:    { keep: 0.15, R: 3, local: 0.80, texture: 0.55, avoidExtremes: true },
+  expert:  { keep: 0,    R: 3, local: 0.90, texture: 0.80, avoidExtremes: true },
 };
 // Largest run of tiles whose 3×3 blocks are all one colour that we leave alone. Such tiles can only ever
 // carry a 0 or a "block full" clue, so a big expanse of them is a chore with nothing to deduce.
-const FLAT_CAP = 100;
+const FLAT_CAP = 45;
 
 // Deterministic (seeded) generator: adds clues until logic alone solves the region, then prunes.
 // Irregular regions can contain "twin" tiles whose neighbourhoods are identical, which no clue set can
@@ -380,18 +382,34 @@ function makeRegionClues(target, nb, keep, rnd, avoidExtremes = false) {
         continue attempt;
       }
       const frontier = list.filter(i => state[i] === UNK && nb[i].some(j => state[j] !== UNK));
-      const pool = shuffle(frontier.length ? frontier : list, rnd);
-      const pick = choose(pool)[0];
+      // Clues added to finish the solve are chosen on merit: if a 0 or a full block is what this
+      // spot needs, that is also the clue a player most wants to find.
+      const pick = shuffle(frontier.length ? frontier : list, rnd)[0];
       clues[pick] = count(pick);
     }
   }
-  // Prune redundant clues. Trivial 0/9 clues are tried first so they only survive when truly needed.
-  let order = shuffle([...Array(total).keys()].filter(i => clues[i] >= 0), rnd);
-  if (avoidExtremes) order = [...order.filter(trivial), ...order.filter(i => !trivial(i))];
-  for (const i of order) {
-    if (rnd() < keep && !(avoidExtremes && trivial(i))) continue;
+  // Prune redundant clues, always attacking whichever number the region currently leans on most, so
+  // what survives spreads across as much of 0–9 as this patch of the picture allows instead of being
+  // a wall of 4s and 5s.
+  const pool = shuffle([...Array(total).keys()].filter(i => clues[i] >= 0), rnd);
+  const live = new Array(10).fill(0);
+  for (const i of pool) live[clues[i]]++;
+  while (pool.length) {
+    let at = 0;
+    for (let k = 1; k < pool.length; k++) if (live[clues[pool[k]]] > live[clues[pool[at]]]) at = k;
+    const i = pool[at]; pool[at] = pool[pool.length - 1]; pool.pop();
+    if (rnd() < keep) continue;                        // difficulty decides how much slack survives
     const v = clues[i]; clues[i] = -1;
-    if (!solve(nb, clues).solved) clues[i] = v;
+    if (solve(nb, clues).solved) live[v]--; else clues[i] = v;
+  }
+
+  // Leave every region one clue you can open with — a 0 or a full block settles its nine tiles
+  // outright. Without one the only way in is comparing overlapping clues, which is a lot to ask as a
+  // first move. Regions whose picture offers no uniform block simply don't get one.
+  if (!clues.some((v, i) => v >= 0 && (v === 0 || v === nb[i].length))) {
+    for (const i of shuffle([...Array(total).keys()], rnd)) {
+      if (trivial(i)) { clues[i] = count(i); break; }
+    }
   }
   return { clues, target, flips };
 }
@@ -654,9 +672,10 @@ function saveProgressSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(sa
 function saveProgress() {
   try { localStorage.setItem(saveKey(), btoa(String.fromCharCode(...G.marks))); } catch {}
 }
-// v4: the two-tone pattern changed (more locally-adaptive threshold + flat-area break-up), so marks
-// saved against the old pattern would read as mistakes. Old v3 saves are simply not picked up.
-const saveKey = () => `pw.save.v4.${G.key}.${G.W}x${G.H}.${G.diffName}`;
+// v5: the two-tone pattern changes whenever the threshold or flat-area handling does, and marks saved
+// against an older pattern would read as mistakes, so each change takes a new key. Old saves are
+// simply not picked up.
+const saveKey = () => `pw.save.v5.${G.key}.${G.W}x${G.H}.${G.diffName}`;
 function loadProgress() {
   try {
     const s = localStorage.getItem(saveKey()); if (!s) return;
