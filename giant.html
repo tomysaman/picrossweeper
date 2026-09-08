@@ -553,7 +553,10 @@ function buildGame(img, key, totalTiles, diffName) {
       }
     }
   }
-  breakUpFlats(target, W, H, FLAT_CAP);   // a picture with genuinely blank areas still gets some detail
+  // Both breakers rewrite the art, so they share one seeded generator: same picture, same board.
+  const breaker = mulberry32(hashStr(`${key}:${W}x${H}:${diffName}:breakup`));
+  let artFlips = breakUpPatterns(target, W, H, PATTERN_CAP, breaker);
+  artFlips += breakUpFlats(target, W, H, FLAT_CAP, breaker);   // blank areas still get some detail
 
   // Cut the grid into organic regions (deterministic for this picture + size).
   const { id: rid, count } = partition(W, H, mulberry32(hashStr(`${key}:${W}x${H}:regions`)));
@@ -564,7 +567,7 @@ function buildGame(img, key, totalTiles, diffName) {
     for (const g of cells) { const x = g % W, y = (g / W) | 0; if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y; }
     return { cells, nb: null, clues: null, bbox: [minx, miny, maxx, maxy] };
   });
-  G = { key, W, H, N, count, rid, localIdx, reg, target, rgb, diff, diffName, flips: 0,
+  G = { key, W, H, N, count, rid, localIdx, reg, target, rgb, diff, diffName, flips: 0, artFlips,
         marks: new Uint8Array(N), done: new Uint8Array(count),
         pix: new ImageData(W, H), tileCanvas: Object.assign(document.createElement('canvas'), { width: W, height: H }) };
   for (let r = 0; r < count; r++) G.reg[r].nb = regionNeighbors(G.reg[r].cells, W, rid, r, localIdx);
@@ -627,39 +630,131 @@ function boxBlur(src, W, H, R) {
   return out;
 }
 
-// A tile is "flat" when every tile in its 3×3 block matches it: nothing there can be deduced, only
-// read off a 0 or a full-block clue. Where such tiles form a run larger than `cap` — a blank sky, an
-// empty background in an uploaded image — flip a 1-in-9 lattice inside it. Every 3×3 block in the run
-// then contains a flipped tile, so the whole expanse turns into clues worth reading. Deterministic:
-// the lattice is fixed, so a picture always cuts up the same way.
-function breakUpFlats(target, W, H, cap) {
-  const N = W * H, flat = new Uint8Array(N);
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const i = y * W + x; let same = true;
-    for (let dy = -1; dy <= 1 && same; dy++) for (let dx = -1; dx <= 1; dx++) {
-      const yy = y + dy, xx = x + dx;
-      if (yy < 0 || yy >= H || xx < 0 || xx >= W) continue;
-      if (target[yy * W + xx] !== target[i]) { same = false; break; }
-    }
-    flat[i] = same ? 1 : 0;
-  }
-  const seen = new Uint8Array(N), stack = [], comp = [];
+// Dithering an even area makes a pattern, not a picture: a mid grey comes out as a checkerboard, an
+// even gradient as dark|light|dark rows or columns. Every block in such a patch counts the same one or
+// two numbers, and the patch repeats itself as far as it runs. Formally the giveaway is that the
+// neighbourhood is unchanged by a small shift, so look for exactly that -- over a window two whole
+// periods wide, so ordinary detail that happens to line up isn't caught -- and knock random tiles out
+// of any large patch that repeats. The patch keeps its brightness, so the picture still reads.
+const SHIFTS = [[1, 0], [0, 1], [1, 1], [1, -1], [2, 0], [0, 2]];
+const PATTERN_CAP = 30;        // smallest shift-invariant patch worth breaking up
+const BUSY_PAIRS = 8;          // of the 12 neighbouring pairs in a 3×3 window (12 = a perfect checkerboard)
+const BUSY_CAP = 5;            // ... and busy patches read as a pattern at a fraction of that size
+const PATTERN_NOISE = 0.11;    // share of a patch's tiles to flip: enough that no window survives intact
+
+function breakUpPatterns(target, W, H, cap, rnd) {
+  const N = W * H;
   let flips = 0;
-  for (let s = 0; s < N; s++) {
-    if (!flat[s] || seen[s]) continue;
-    stack.length = 0; comp.length = 0; stack.push(s); seen[s] = 1;
-    while (stack.length) {                                  // 4-connected run of flat tiles
-      const i = stack.pop(); comp.push(i);
-      const x = i % W, y = (i / W) | 0;
-      if (x > 0)     { const j = i - 1; if (flat[j] && !seen[j]) { seen[j] = 1; stack.push(j); } }
-      if (x + 1 < W) { const j = i + 1; if (flat[j] && !seen[j]) { seen[j] = 1; stack.push(j); } }
-      if (y > 0)     { const j = i - W; if (flat[j] && !seen[j]) { seen[j] = 1; stack.push(j); } }
-      if (y + 1 < H) { const j = i + W; if (flat[j] && !seen[j]) { seen[j] = 1; stack.push(j); } }
+  // One round of noise shrinks a patch without dissolving it, so keep going until nothing is left
+  // over the cap -- or until three rounds have been spent, which stops a pathological picture from
+  // being sanded down to static.
+  for (let pass = 0; pass < 3; pass++) {
+  const periodic = new Uint8Array(N), checker = new Uint8Array(N);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x;
+    for (const [dx, dy] of SHIFTS) {
+      const r = 2 * Math.max(Math.abs(dx), Math.abs(dy));
+      if (x < r + Math.abs(dx) || x + r + Math.abs(dx) >= W) continue;
+      if (y < r + Math.abs(dy) || y + r + Math.abs(dy) >= H) continue;
+      let shifted = true, flat = true;
+      for (let yy = y - r; yy <= y + r && shifted; yy++) for (let xx = x - r; xx <= x + r; xx++) {
+        const g = yy * W + xx;
+        if (target[g] !== target[g + dy * W + dx]) { shifted = false; break; }
+        if (target[g] !== target[i]) flat = false;
+      }
+      if (shifted && !flat) { periodic[i] = 1; break; }   // flat runs are breakUpFlats' business
     }
-    if (comp.length <= cap) continue;
-    for (const i of comp) if ((i % W) % 3 === 1 && (((i / W) | 0) % 3 === 1)) { target[i] ^= 1; flips++; }
+    // The checkerboard -- how error diffusion renders a mid grey -- needs its own, looser test. A
+    // checkerboard block counts exactly 4 or 5, so a patch only a few tiles across already reads as a
+    // wall of 4s and 5s, and the shift test above never sees it: it wants a clean 5×5 window, while
+    // real ones come out of the dither with defects all through them. Score how busy a tile's 3×3
+    // window is instead -- how many neighbouring pairs inside it disagree, twelve being a perfect
+    // checkerboard -- and flag anything close to the top of that scale.
+    if (x > 0 && x + 1 < W && y > 0 && y + 1 < H) {
+      let busy = 0;
+      for (let yy = y - 1; yy <= y + 1; yy++) for (let xx = x - 1; xx <= x + 1; xx++) {
+        const g = yy * W + xx;
+        if (xx < x + 1 && target[g] !== target[g + 1]) busy++;
+        if (yy < y + 1 && target[g] !== target[g + W]) busy++;
+      }
+      if (busy >= BUSY_PAIRS) checker[i] = 1;
+    }
+  }
+  let hit = 0;
+  for (const [mask, lim] of [[periodic, cap], [checker, BUSY_CAP]]) {
+    for (const comp of components(mask, W, H)) {
+      if (comp.length <= lim) continue;
+      hit++;
+      for (const i of comp) if (rnd() < PATTERN_NOISE) { target[i] ^= 1; flips++; }
+    }
+  }
+  if (!hit) break;
   }
   return flips;
+}
+
+// A tile is "flat" when every tile in its 3×3 block matches it: nothing there can be deduced, only
+// read off a 0 or a full-block clue. Where such tiles form a run larger than `cap` -- a blank sky, an
+// empty background in an uploaded image -- break the run up by flipping tiles inside it. A flat run is
+// blank by definition, so there is no detail to protect and we can be generous: work through it a
+// 3×3 cell at a time and give each cell nought to three flipped tiles at seeded random positions.
+// Even spacing would put one flipped tile in every block and turn the whole expanse into 8s, which is
+// the same chore as before with more reading; varied spacing gives the run a spread of numbers.
+// Random placement can leave a cell's worth of the run flat, so repeat until nothing is over the cap,
+// falling back on the fixed one-per-cell lattice to guarantee the last pass terminates.
+function planCell(rnd, strict) {
+  if (strict) return [4];                                   // the middle of the cell
+  const r = rnd(), n = r < 0.15 ? 0 : r < 0.7 ? 1 : r < 0.92 ? 2 : 3;
+  const free = [0, 1, 2, 3, 4, 5, 6, 7, 8], out = [];
+  for (let k = 0; k < n; k++) out.push(free.splice((rnd() * free.length) | 0, 1)[0]);
+  return out;
+}
+
+function breakUpFlats(target, W, H, cap, rnd) {
+  const N = W * H;
+  let flips = 0;
+  for (let pass = 0; pass < 4; pass++) {
+    const flat = new Uint8Array(N);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = y * W + x; let same = true;
+      for (let dy = -1; dy <= 1 && same; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const yy = y + dy, xx = x + dx;
+        if (yy < 0 || yy >= H || xx < 0 || xx >= W) continue;
+        if (target[yy * W + xx] !== target[i]) { same = false; break; }
+      }
+      flat[i] = same ? 1 : 0;
+    }
+    const big = components(flat, W, H).filter(c => c.length > cap);
+    if (!big.length) break;
+    const strict = pass === 3, cells = new Map();
+    for (const comp of big) for (const i of comp) {
+      const x = i % W, y = (i / W) | 0, ck = ((y / 3) | 0) * W + ((x / 3) | 0);
+      let plan = cells.get(ck);
+      if (plan === undefined) { plan = planCell(rnd, strict); cells.set(ck, plan); }
+      if (plan.includes((y % 3) * 3 + (x % 3))) { target[i] ^= 1; flips++; }
+    }
+  }
+  return flips;
+}
+
+// 4-connected runs of the tiles flagged in `mask`.
+function components(mask, W, H) {
+  const N = W * H, seen = new Uint8Array(N), out = [], stack = [];
+  for (let s = 0; s < N; s++) {
+    if (!mask[s] || seen[s]) continue;
+    stack.length = 0; stack.push(s); seen[s] = 1;
+    const comp = [];
+    while (stack.length) {
+      const i = stack.pop(); comp.push(i);
+      const x = i % W, y = (i / W) | 0;
+      if (x > 0)     { const j = i - 1; if (mask[j] && !seen[j]) { seen[j] = 1; stack.push(j); } }
+      if (x + 1 < W) { const j = i + 1; if (mask[j] && !seen[j]) { seen[j] = 1; stack.push(j); } }
+      if (y > 0)     { const j = i - W; if (mask[j] && !seen[j]) { seen[j] = 1; stack.push(j); } }
+      if (y + 1 < H) { const j = i + W; if (mask[j] && !seen[j]) { seen[j] = 1; stack.push(j); } }
+    }
+    out.push(comp);
+  }
+  return out;
 }
 
 // ---------- region helpers ----------
@@ -719,7 +814,7 @@ function saveProgress() {
 // v5: the two-tone pattern changes whenever the threshold or flat-area handling does, and marks saved
 // against an older pattern would read as mistakes, so each change takes a new key. Old saves are
 // simply not picked up.
-const saveKey = () => `pw.save.v9.${G.key}.${G.W}x${G.H}.${G.diffName}`;
+const saveKey = () => `pw.save.v10.${G.key}.${G.W}x${G.H}.${G.diffName}`;
 function loadProgress() {
   try {
     const s = localStorage.getItem(saveKey()); if (!s) return;
