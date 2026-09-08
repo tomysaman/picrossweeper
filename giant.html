@@ -21,7 +21,7 @@
     --on-accent: #2b2620;
     --unknown: #6b6052;
     --light: #f3e4b8;
-    --dark: #1c2a3a;
+    --dark: #24384a;
     --x-mark: #4c5f78;
     --clue-on-light: #000000;
     --clue-on-dark: #e8dcbf;
@@ -31,7 +31,7 @@
     --clue-done-on-dark: #5c6a7a;
     --clue-done-on-unknown: #877b69;
     --grid-line: rgba(0,0,0,.28);
-    --region-line: rgba(217,164,65,.55);
+    --region-line: rgba(0,0,0,.7);
     --bad: #c9503f;
     --good: #7fb069;
     --shadow: rgba(0,0,0,.4);
@@ -61,7 +61,7 @@
     --clue-done-on-dark: #b08a8e;
     --clue-done-on-unknown: #6d719a;
     --grid-line: rgba(0,0,0,.35);
-    --region-line: rgba(247,142,85,.6);
+    --region-line: rgba(0,0,0,.7);
     --bad: #f78e55;
     --good: #f78e55;
     --shadow: rgba(0,0,0,.45);
@@ -168,7 +168,8 @@
   </span>
   <span class="group">
     <button id="musicBtn" title="Play / pause background music (M)">♪ Play</button>
-    <button id="nextBtn" title="Next track">⏭</button>
+    <button id="prevBtn" title="Previous track ([)">⏮</button>
+    <button id="nextBtn" title="Next track (])">⏭</button>
     <input id="volume" type="range" min="0" max="1" step="0.02" value="0.5" title="Volume">
   </span>
   <span class="group"><button id="helpBtn" title="How to play (?)">?</button></span>
@@ -188,7 +189,7 @@
     <span class="sw" style="background:var(--light)"></span>Left‑click / drag: light &nbsp;
     <span class="sw" style="background:var(--dark)"></span>Right‑click / drag: dark &nbsp; click again: clear<br>
     <b>Move around:</b> mouse wheel zooms · middle‑drag, <kbd>Space</kbd>+drag or the ✋ tool pans · arrows or <kbd>WASD</kbd> pan · <kbd>F</kbd> fits · pinch on touch · click the minimap to jump.<br>
-    <b>Keys:</b> <kbd>Ctrl+Z</kbd> undo · <kbd>X</kbd> tap colour · <kbd>M</kbd> music · <kbd>?</kbd> this panel.<br>
+    <b>Keys:</b> <kbd>Ctrl+Z</kbd> undo · <kbd>X</kbd> tap colour · <kbd>M</kbd> music · <kbd>[</kbd>/<kbd>]</kbd> prev/next track · <kbd>?</kbd> this panel.<br>
     Progress is saved automatically in this browser, per picture. Choose “Your own image…” to play any wallpaper.
   </div>
 </main>
@@ -779,7 +780,7 @@ function draw() {
     ctx.stroke();
   }
   if (s >= 2.5) {  // region borders: every edge between two tiles of different regions
-    ctx.strokeStyle = C.regionLine; ctx.lineWidth = s >= 10 ? 2 : 1; ctx.beginPath();
+    ctx.strokeStyle = C.regionLine; ctx.lineWidth = s >= 10 ? 3.5 : 2; ctx.beginPath();
     const rid = G.rid, W = G.W;
     for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
       const g = y * W + x, r = rid[g];
@@ -911,6 +912,8 @@ document.addEventListener('keydown', e => {
   if (e.key === 'z' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); undo(); }
   if (e.key === 'x') modeBtn.click();
   if (e.key === 'm') $('musicBtn').click();
+  if (e.key === '[') $('prevBtn').click();
+  if (e.key === ']') $('nextBtn').click();
   if (e.key === 'f') fitView();
   if (e.key === '?') $('helpBtn').click();
   if (e.key === '+' || e.key === '=') zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, 1.25);
@@ -1032,7 +1035,7 @@ const TRACKS = [
 $('credits').innerHTML = TRACKS.map(t => `<a href="${t.page}" target="_blank" rel="noopener">${t.title.split(' — ')[0]}</a> (${t.by})`).join(' · ');
 
 const audio = new Audio(); audio.preload = 'none';
-const musicBtn = $('musicBtn'), nextBtn = $('nextBtn'), volumeEl = $('volume'), nowEl = $('nowPlaying');
+const musicBtn = $('musicBtn'), prevBtn = $('prevBtn'), nextBtn = $('nextBtn'), volumeEl = $('volume'), nowEl = $('nowPlaying');
 let trackIdx = Math.floor(Math.random() * TRACKS.length), musicWanted = false;
 try { const v = localStorage.getItem('pw.volume'); if (v !== null) volumeEl.value = v; } catch {}
 audio.volume = +volumeEl.value;
@@ -1049,6 +1052,7 @@ async function playMusic() {
 function pauseMusic() { musicWanted = false; audio.pause(); updateMusicBtn(); }
 musicBtn.onclick = () => (audio.paused ? playMusic() : pauseMusic());
 nextBtn.onclick = () => { loadTrack(trackIdx + 1); if (musicWanted) playMusic(); };
+prevBtn.onclick = () => { loadTrack(trackIdx - 1); if (musicWanted) playMusic(); };
 volumeEl.oninput = () => { audio.volume = +volumeEl.value; try { localStorage.setItem('pw.volume', volumeEl.value); } catch {} };
 audio.addEventListener('ended', () => { loadTrack(trackIdx + 1); if (musicWanted) playMusic(); });
 audio.addEventListener('error', () => { nowEl.textContent = `Couldn't load “${TRACKS[trackIdx].title}” — skipping.`; if (musicWanted) setTimeout(() => nextBtn.onclick(), 1500); });

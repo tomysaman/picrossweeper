@@ -21,7 +21,7 @@
     --on-accent: #2b2620;
     --unknown: #6b6052;
     --light: #f3e4b8;
-    --dark: #1c2a3a;
+    --dark: #24384a;
     --light-won: #f7e9bf;
     --dark-won: #16202c;
     --x-mark: #4c5f78;
@@ -213,7 +213,8 @@
   </span>
   <span class="music">
     <button id="musicBtn" title="Play / pause background music (M)">♪ Play</button>
-    <button id="nextBtn" title="Next track">⏭</button>
+    <button id="prevBtn" title="Previous track ([)">⏮</button>
+    <button id="nextBtn" title="Next track (])">⏭</button>
     <input id="volume" type="range" min="0" max="1" step="0.02" value="0.5" title="Volume">
   </span>
 </div>
@@ -233,7 +234,7 @@
     <span><span class="sw" style="background:var(--unknown)"></span>Click again: clear</span>
   </div>
   <div>A number turns grey once every tile in its 3×3 block has been marked. Every puzzle is generated to be solvable by pure logic — no guessing needed.</div>
-  <div>Keys: <b>N</b> new puzzle · <b>Ctrl+Z</b> undo · <b>X</b> tap colour · <b>M</b> music. Music starts on your first click on the board.</div>
+  <div>Keys: <b>N</b> new puzzle · <b>Ctrl+Z</b> undo · <b>X</b> tap colour · <b>M</b> music · <b>[</b>/<b>]</b> prev/next track. Music starts on your first click on the board.</div>
 </div>
 
 <footer>
@@ -708,6 +709,7 @@ document.getElementById('credits').innerHTML = TRACKS.map(t => `<a href="${t.pag
 const audio = new Audio();
 audio.preload = 'none';
 const musicBtn = document.getElementById('musicBtn');
+const prevBtn = document.getElementById('prevBtn');
 const nextBtn = document.getElementById('nextBtn');
 const volumeEl = document.getElementById('volume');
 const nowEl = document.getElementById('nowPlaying');
@@ -739,6 +741,7 @@ function pauseMusic() { musicWanted = false; audio.pause(); updateMusicBtn(); }
 
 musicBtn.onclick = () => (audio.paused ? playMusic() : pauseMusic());
 nextBtn.onclick = () => { loadTrack(trackIdx + 1); if (musicWanted) playMusic(); };
+prevBtn.onclick = () => { loadTrack(trackIdx - 1); if (musicWanted) playMusic(); };
 volumeEl.oninput = () => { audio.volume = +volumeEl.value; try { localStorage.setItem('pw.volume', volumeEl.value); } catch {} };
 audio.addEventListener('ended', () => { loadTrack(trackIdx + 1); if (musicWanted) playMusic(); });
 audio.addEventListener('error', () => {
@@ -762,6 +765,8 @@ document.addEventListener('keydown', e => {
   if (e.key === 'n') newGame();
   if (e.key === 'x') modeBtn.click();
   if (e.key === 'm') musicBtn.click();
+  if (e.key === '[') prevBtn.click();
+  if (e.key === ']') nextBtn.click();
 });
 window.addEventListener('resize', () => { if (puzzle) { const m = marks; render(); marks = m; refresh(); } });
 
