@@ -199,14 +199,6 @@
   .counter.match { animation: ringPulse .7s ease; border-radius: 10px; }
   .t.ring { animation: ringPulse .7s ease; }
   @keyframes ringPulse { 0%, 100% { box-shadow: none; } 35% { box-shadow: 0 0 0 4px var(--accent); } }
-  .demo-block .t.shake { animation: tileShake .4s ease-in-out; }
-  @keyframes tileShake {
-    0%, 100% { transform: translateX(0); }
-    20% { transform: translateX(-4px); }
-    40% { transform: translateX(4px); }
-    60% { transform: translateX(-3px); }
-    80% { transform: translateX(3px); }
-  }
 
   .replay {
     font: inherit; font-size: 13px; background: var(--btn); color: var(--muted);
@@ -502,20 +494,6 @@
 </div>
 
 <div class="panelbox">
-  <h3>Matching clues don't fill tiles — they link them</h3>
-  <p>
-    Two side-by-side clues with the <b>same number</b> have a difference of zero, so on their own they can't
-    paint anything: they just tell you the two outer columns hold <b>equal</b> counts of light tiles. That's
-    not nothing — the moment some other clue pins down one side, you get the other side's count for free.
-  </p>
-  <div class="demo-block" id="demo-tip-equal">
-    <div class="grid" id="d-tip-equal"></div>
-    <div class="step-label">two 5s — no tiles resolve yet, but the outer columns are now tied together</div>
-    <button class="replay" type="button">↻ Replay</button>
-  </div>
-</div>
-
-<div class="panelbox">
   <h3>A gap of one column still shares a column</h3>
   <p>
     Clues two columns apart don't touch, but their blocks still overlap by one column instead of two. The
@@ -534,34 +512,16 @@
   </div>
 </div>
 
-<p class="muted">
-  The last two aren't new deductions — they're how to use everything above without tripping over yourself.
-</p>
-
 <div class="panelbox">
-  <h3>Adjacent clues can never differ by more than 3</h3>
+  <h3>Matching clues don't fill tiles — they link them</h3>
   <p>
-    Two clues one column apart share two of their three columns, and whatever the shared part contributes,
-    it contributes to both equally. The exclusive column can only swing the total by <b>3</b> either way — so
-    if two side-by-side clues in your puzzle are ever more than 3 apart, one of them has been misread.
+    Two side-by-side clues with the <b>same number</b> have a difference of zero, so on their own they can't
+    paint anything: they just tell you the two outer columns hold <b>equal</b> counts of light tiles. That's
+    not nothing — the moment some other clue pins down one side, you get the other side's count for free.
   </p>
-  <div class="demo-block" id="demo-tip-limit">
-    <div class="grid" id="d-tip-limit"></div>
-    <div class="step-label">9 next to 2 — a gap of 7 can't happen between neighbours; recheck one of the two</div>
-    <button class="replay" type="button">↻ Replay</button>
-  </div>
-</div>
-
-<div class="panelbox">
-  <h3>Re-scan after every fill</h3>
-  <p>
-    A clue that looks stuck can stop being stuck the moment <i>any</i> tile in its block gets coloured in —
-    even one filled in by a completely different clue elsewhere on the board. Get in the habit of
-    re-checking a clue's neighbours after each new fact lands, not just the first time you look at it.
-  </p>
-  <div class="demo-block" id="demo-tip-rescan">
-    <div class="grid" id="d-tip-rescan"></div>
-    <div class="step-label">needs 1 more among 2 unknowns — stuck, until a fact from elsewhere lands on one of them</div>
+  <div class="demo-block" id="demo-tip-equal">
+    <div class="grid" id="d-tip-equal"></div>
+    <div class="step-label">two 5s — no tiles resolve yet, but the outer columns are now tied together</div>
     <button class="replay" type="button">↻ Replay</button>
   </div>
 </div>
@@ -1200,67 +1160,6 @@ setupDemo('demo-tip-gap', 'd-tip-gap', {
       if (counterNum) { counterNum.textContent = '2'; bump(counterNum); }
       if (counterChip) pulse(counterChip, 'match');
     }, afterRight + 400);
-  },
-});
-
-/* ---------- 5. Tips: adjacent clues more than 3 apart are impossible ---------- */
-setupDemo('demo-tip-limit', 'd-tip-limit', {
-  baseSpec: `
-    U- U- U- U-
-    U- U9 U2 U-
-    U- U- U- U-`,
-  boxOpts: { size: 36 },
-  animate({ grid, instant, isCurrent }) {
-    const tiles = tileEls(grid);
-    const idx = (r, c) => r * 4 + c;
-    const clueA = tiles[idx(1, 1)];
-    const clueB = tiles[idx(1, 2)];
-    if (instant) {
-      clueA.classList.add('bad');
-      clueB.classList.add('bad');
-      return;
-    }
-    setTimeout(() => {
-      if (!isCurrent()) return;
-      [clueA, clueB].forEach((t) => { t.classList.add('bad'); pulse(t, 'shake'); });
-    }, 600);
-  },
-});
-
-/* ---------- 5. Tips: re-scan a stuck clue after a fact lands from elsewhere ---------- */
-setupDemo('demo-tip-rescan', 'd-tip-rescan', {
-  baseSpec: `
-    D- D- U-
-    D- L2 U-
-    D- D- D-`,
-  boxOpts: { size: 36 },
-  animate({ grid, instant, isCurrent }) {
-    const tiles = tileEls(grid);
-    const idx = (r, c) => r * 3 + c;
-    const clue = tiles[idx(1, 1)];
-    const fromElsewhere = tiles[idx(0, 2)];
-    const deduced = tiles[idx(1, 2)];
-    if (instant) {
-      setTile(fromElsewhere, { state: 'D' });
-      setTile(deduced, { state: 'L' });
-      deduced.classList.add('mark');
-      clue.classList.add('done');
-      return;
-    }
-    setTimeout(() => {
-      if (!isCurrent()) return;
-      setTile(fromElsewhere, { state: 'D' });
-      popTile(fromElsewhere);
-      pulse(fromElsewhere, 'ring');
-    }, 900);
-    setTimeout(() => {
-      if (!isCurrent()) return;
-      setTile(deduced, { state: 'L' });
-      popTile(deduced);
-      setTimeout(() => { if (isCurrent()) deduced.classList.add('mark'); }, 200);
-      clue.classList.add('done');
-      settleTile(clue);
-    }, 1900);
   },
 });
 
