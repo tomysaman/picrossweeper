@@ -874,7 +874,7 @@ setupDemo('demo-r2', 'd-r2a', {
   const cornerGrid = document.getElementById('d-tip-corner');
   const edgeGrid = document.getElementById('d-tip-edge');
   const cornerSpec = `U4 U- / U- U-`;
-  const edgeSpec = `U6 U- U- / U- U- U-`;
+  const edgeSpec = `U- U6 U- / U- U- U-`;
   let gen = 0;
   function reset() {
     draw('d-tip-corner', cornerSpec, { size: 34 });
@@ -882,7 +882,7 @@ setupDemo('demo-r2', 'd-r2a', {
   }
   function fillBlock(grid, instant, isCurrent) {
     const tiles = tileEls(grid);
-    const clue = tiles[0];
+    const clue = tiles.find((t) => t.classList.contains('has-num'));
     if (instant) {
       tiles.forEach((t) => setTile(t, { state: 'L' }));
       clue.classList.add('done');
