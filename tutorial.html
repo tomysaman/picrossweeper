@@ -452,13 +452,14 @@
 <div class="panelbox">
   <h3>A repeated pair solves more than it shows</h3>
   <p>
-    If the same two numbers line up down several rows — a column of 6s next to a column of 3s — don't
-    solve them one row at a time. Each row's comparison overlaps the next row's, so a run of three matching
-    rows resolves a strip <b>two rows taller</b> than the run itself, for free.
+    This isn't about the numbers 6 and 3 specifically — it's <b>any adjacent pair exactly 3 apart</b>: 8 and
+    5, 7 and 4, 6 and 3, 5 and 2, 4 and 1, all work the same way. If a pair like that lines up down several
+    rows, don't solve them one row at a time. Each row's comparison overlaps the next row's, so a run of
+    three matching rows resolves a strip <b>two rows taller</b> than the run itself, for free.
   </p>
   <div class="demo-block" id="demo-tip-strip">
     <div class="grid" id="d-tip-strip"></div>
-    <div class="step-label">three rows of 6 | 3 resolve a five-row strip</div>
+    <div class="step-label">three rows of any pair 3 apart (6 | 3 shown here) resolve a five-row strip</div>
     <button class="replay" type="button">↻ Replay</button>
   </div>
 </div>
