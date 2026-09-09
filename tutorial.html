@@ -406,7 +406,107 @@
   clues you haven't compared yet.
 </p>
 
-<h2><span class="step">5</span>If you get stuck or slip up</h2>
+<h2><span class="step">5</span>Patterns that speed things up</h2>
+
+<p>
+  The two moves above are all you strictly need. Everything here is the same logic wearing a different
+  hat — recognising it faster means fewer rows solved one tile at a time.
+</p>
+
+<div class="panelbox">
+  <h3>Corners and edges saturate faster</h3>
+  <p>
+    A block's maximum depends on where it sits: a corner block is only 4 tiles, an edge block only 6.
+    So a <b>corner clue of 4</b> or an <b>edge clue of 6</b> is just as final as an interior <b>9</b> —
+    every tile in that smaller block is light, immediately, no comparison needed.
+  </p>
+  <div class="demo-block" id="demo-tip-satur">
+    <div class="demo-row">
+      <div>
+        <div class="grid" id="d-tip-corner"></div>
+        <div class="step-label">corner · 4 of 4</div>
+      </div>
+      <div>
+        <div class="grid" id="d-tip-edge"></div>
+        <div class="step-label">edge · 6 of 6</div>
+      </div>
+    </div>
+    <button class="replay" type="button">↻ Replay</button>
+  </div>
+</div>
+
+<div class="panelbox">
+  <h3>Move 2 works stacked, not just side by side</h3>
+  <p>
+    Nothing about the comparison trick cares which direction the clues sit. Two clues one above the other
+    overlap exactly like two side-by-side clues do — it's just the row only one of them can see that
+    resolves, instead of a column.
+  </p>
+  <div class="demo-block" id="demo-tip-vert">
+    <div class="grid" id="d-tip-vert"></div>
+    <div class="step-label">6 above 3 — the top row resolves light, the bottom row dark</div>
+    <button class="replay" type="button">↻ Replay</button>
+  </div>
+</div>
+
+<div class="panelbox">
+  <h3>A repeated pair solves more than it shows</h3>
+  <p>
+    If the same two numbers line up down several rows — a column of 6s next to a column of 3s — don't
+    solve them one row at a time. Each row's comparison overlaps the next row's, so a run of three matching
+    rows resolves a strip <b>two rows taller</b> than the run itself, for free.
+  </p>
+  <div class="demo-block" id="demo-tip-strip">
+    <div class="grid" id="d-tip-strip"></div>
+    <div class="step-label">three rows of 6 | 3 resolve a five-row strip</div>
+    <button class="replay" type="button">↻ Replay</button>
+  </div>
+</div>
+
+<div class="panelbox">
+  <h3>A saturated clue cascades through its neighbours</h3>
+  <p>
+    A maxed-out clue doesn't stop at solving its own block — its light tiles spill into a neighbour's
+    block too. Once that neighbour's own number is already satisfied by what's known, whatever it has
+    left over must be dark. And that emptiness can hand off to the <i>next</i> clue over, the same way.
+  </p>
+  <div class="demo-block" id="demo-tip-chain">
+    <div class="grid" id="d-tip-chain"></div>
+    <div class="step-label">9 saturates two columns; 6 and 3 each fall because their count is already met</div>
+    <button class="replay" type="button">↻ Replay</button>
+  </div>
+</div>
+
+<div class="panelbox">
+  <h3>Diagonal neighbours, when one is already maxed out</h3>
+  <p>
+    Diagonal clues overlap in a small square instead of a clean line, so the leftover region is L-shaped and
+    rarely forces anything on its own. But if one of the pair is already saturated — a 0 or the maximum for
+    its position — its whole block, overlap included, is already known, and that's often enough to finish
+    the other clue's leftover tiles.
+  </p>
+  <div class="demo-block" id="demo-tip-diag">
+    <div class="grid" id="d-tip-diag"></div>
+    <div class="step-label">9 saturates its block; the 4 diagonal to it has nothing left to give the rest</div>
+    <button class="replay" type="button">↻ Replay</button>
+  </div>
+</div>
+
+<div class="panelbox">
+  <h3>Matching clues don't fill tiles — they link them</h3>
+  <p>
+    Two side-by-side clues with the <b>same number</b> have a difference of zero, so on their own they can't
+    paint anything: they just tell you the two outer columns hold <b>equal</b> counts of light tiles. That's
+    not nothing — the moment some other clue pins down one side, you get the other side's count for free.
+  </p>
+  <div class="demo-block" id="demo-tip-equal">
+    <div class="grid" id="d-tip-equal"></div>
+    <div class="step-label">two 5s — no tiles resolve yet, but the outer columns are now tied together</div>
+    <button class="replay" type="button">↻ Replay</button>
+  </div>
+</div>
+
+<h2><span class="step">6</span>If you get stuck or slip up</h2>
 
 <table>
   <tr><th>Button</th><th>What it does</th></tr>
@@ -422,7 +522,7 @@
   <figcaption>Check has found one mistake: that tile was marked dark, but the picture needs it light.</figcaption>
 </figure>
 
-<h2><span class="step">6</span>Finishing</h2>
+<h2><span class="step">7</span>Finishing</h2>
 
 <p>
   Mark every tile correctly and the board locks, the clue digits fade away, and the picture is left standing
@@ -440,7 +540,7 @@
   </figure>
 </div>
 
-<h2><span class="step">7</span>Setting up a puzzle you'll enjoy</h2>
+<h2><span class="step">8</span>Setting up a puzzle you'll enjoy</h2>
 
 <table>
   <tr><th>Setting</th><th>What to know</th></tr>
@@ -534,6 +634,14 @@ function setTile(tile, { state, content } = {}) {
 const pulse = (el, cls) => { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); };
 const popTile = (t) => pulse(t, 'pop');
 const settleTile = (t) => pulse(t, 'settle');
+function addBox(grid, [r, c, h, w]) {
+  const b = document.createElement('div');
+  b.className = 'box';
+  b.style.gridArea = `${r + 1} / ${c + 1} / span ${h} / span ${w}`;
+  b.style.opacity = 0;
+  grid.appendChild(b);
+  return b;
+}
 
 /* setupDemo wires one animated diagram to: draw its resting frame, replay on click, and
    auto-play once when scrolled into view. A generation token guards every setTimeout so an
@@ -757,6 +865,232 @@ setupDemo('demo-r2', 'd-r2a', {
       popTile(tile);
       setTimeout(() => { if (isCurrent()) tile.classList.add('mark'); }, 200);
     }, afterLeft + i * 180));
+  },
+});
+
+/* ---------- 5. Tips: corner & edge saturation (two mini grids, one replay) ---------- */
+(function setupSaturationDemo() {
+  const container = document.getElementById('demo-tip-satur');
+  const cornerGrid = document.getElementById('d-tip-corner');
+  const edgeGrid = document.getElementById('d-tip-edge');
+  const cornerSpec = `U4 U- / U- U-`;
+  const edgeSpec = `U6 U- U- / U- U- U-`;
+  let gen = 0;
+  function reset() {
+    draw('d-tip-corner', cornerSpec, { size: 34 });
+    draw('d-tip-edge', edgeSpec, { size: 34 });
+  }
+  function fillBlock(grid, instant, isCurrent) {
+    const tiles = tileEls(grid);
+    const clue = tiles[0];
+    if (instant) {
+      tiles.forEach((t) => setTile(t, { state: 'L' }));
+      clue.classList.add('done');
+      return;
+    }
+    tiles.forEach((t, i) => setTimeout(() => {
+      if (!isCurrent()) return;
+      setTile(t, { state: 'L' });
+      popTile(t);
+    }, 400 + i * 200));
+    setTimeout(() => {
+      if (!isCurrent()) return;
+      clue.classList.add('done');
+      settleTile(clue);
+    }, 400 + tiles.length * 200 + 200);
+  }
+  function play() {
+    const my = ++gen;
+    reset();
+    const isCurrent = () => my === gen;
+    fillBlock(cornerGrid, reduceMotion, isCurrent);
+    fillBlock(edgeGrid, reduceMotion, isCurrent);
+  }
+  reset();
+  container.querySelector('.replay')?.addEventListener('click', play);
+  new IntersectionObserver((entries, obs) => {
+    entries.forEach((e) => { if (e.isIntersecting) { play(); obs.unobserve(e.target); } });
+  }, { threshold: 0.4 }).observe(container);
+})();
+
+/* ---------- 5. Tips: Move 2 stacked vertically ---------- */
+setupDemo('demo-tip-vert', 'd-tip-vert', {
+  baseSpec: `
+    U- U- U-
+    U- U6 U-
+    U- U3 U-
+    U- U- U-`,
+  boxOpts: { size: 36 },
+  animate({ grid, instant, isCurrent }) {
+    const tiles = tileEls(grid);
+    const idx = (r, c) => r * 3 + c;
+    const top = [0, 1, 2].map((c) => ({ r: 0, c, state: 'L' }));
+    const bottom = [0, 1, 2].map((c) => ({ r: 3, c, state: 'D' }));
+    const apply = (t) => { const tile = tiles[idx(t.r, t.c)]; setTile(tile, { state: t.state }); return tile; };
+    if (instant) {
+      [...top, ...bottom].forEach((t) => apply(t).classList.add('mark'));
+      return;
+    }
+    top.forEach((t, i) => setTimeout(() => {
+      if (!isCurrent()) return;
+      const tile = apply(t);
+      popTile(tile);
+      setTimeout(() => { if (isCurrent()) tile.classList.add('mark'); }, 200);
+    }, 500 + i * 180));
+    const afterTop = 500 + top.length * 180 + 300;
+    bottom.forEach((t, i) => setTimeout(() => {
+      if (!isCurrent()) return;
+      const tile = apply(t);
+      popTile(tile);
+      setTimeout(() => { if (isCurrent()) tile.classList.add('mark'); }, 200);
+    }, afterTop + i * 180));
+  },
+});
+
+/* ---------- 5. Tips: a repeated column pair resolves a taller strip ---------- */
+setupDemo('demo-tip-strip', 'd-tip-strip', {
+  baseSpec: `
+    U- U- U- U-
+    U- U6 U3 U-
+    U- U6 U3 U-
+    U- U6 U3 U-
+    U- U- U- U-`,
+  boxOpts: { size: 32 },
+  animate({ grid, instant, isCurrent }) {
+    const tiles = tileEls(grid);
+    const idx = (r, c) => r * 4 + c;
+    const left = [0, 1, 2, 3, 4].map((r) => ({ r, c: 0, state: 'L' }));
+    const right = [0, 1, 2, 3, 4].map((r) => ({ r, c: 3, state: 'D' }));
+    const apply = (t) => { const tile = tiles[idx(t.r, t.c)]; setTile(tile, { state: t.state }); return tile; };
+    if (instant) {
+      [...left, ...right].forEach((t) => apply(t).classList.add('mark'));
+      return;
+    }
+    left.forEach((t, i) => setTimeout(() => {
+      if (!isCurrent()) return;
+      const tile = apply(t);
+      popTile(tile);
+      setTimeout(() => { if (isCurrent()) tile.classList.add('mark'); }, 200);
+    }, 500 + i * 150));
+    const afterLeft = 500 + left.length * 150 + 300;
+    right.forEach((t, i) => setTimeout(() => {
+      if (!isCurrent()) return;
+      const tile = apply(t);
+      popTile(tile);
+      setTimeout(() => { if (isCurrent()) tile.classList.add('mark'); }, 200);
+    }, afterLeft + i * 150));
+  },
+});
+
+/* ---------- 5. Tips: a saturated clue cascades into its neighbours ---------- */
+setupDemo('demo-tip-chain', 'd-tip-chain', {
+  baseSpec: `
+    U- U- U- U- U-
+    U- U9 U6 U3 U-
+    U- U- U- U- U-`,
+  boxOpts: { size: 34, box: [0, 0, 3, 3] },
+  animate({ grid, box, instant, isCurrent }) {
+    const tiles = tileEls(grid);
+    const idx = (r, c) => r * 5 + c;
+    const satCols = [0, 1, 2].flatMap((c) => [0, 1, 2].map((r) => ({ r, c, state: 'L' })));
+    const col3 = [0, 1, 2].map((r) => ({ r, c: 3, state: 'D' }));
+    const col4 = [0, 1, 2].map((r) => ({ r, c: 4, state: 'D' }));
+    const apply = (t) => { const tile = tiles[idx(t.r, t.c)]; setTile(tile, { state: t.state }); return tile; };
+    if (instant) {
+      if (box) box.style.opacity = 1;
+      [...satCols, ...col3, ...col4].forEach((t) => apply(t).classList.add('mark'));
+      return;
+    }
+    setTimeout(() => { if (isCurrent() && box) { box.style.opacity = 1; pulse(box, 'enter'); } }, 300);
+    satCols.forEach((t, i) => setTimeout(() => {
+      if (!isCurrent()) return;
+      const tile = apply(t);
+      popTile(tile);
+      setTimeout(() => { if (isCurrent()) tile.classList.add('mark'); }, 200);
+    }, 700 + i * 130));
+    const after1 = 700 + satCols.length * 130 + 300;
+    col3.forEach((t, i) => setTimeout(() => {
+      if (!isCurrent()) return;
+      const tile = apply(t);
+      popTile(tile);
+      setTimeout(() => { if (isCurrent()) tile.classList.add('mark'); }, 200);
+    }, after1 + i * 150));
+    const after2 = after1 + col3.length * 150 + 300;
+    col4.forEach((t, i) => setTimeout(() => {
+      if (!isCurrent()) return;
+      const tile = apply(t);
+      popTile(tile);
+      setTimeout(() => { if (isCurrent()) tile.classList.add('mark'); }, 200);
+    }, after2 + i * 150));
+  },
+});
+
+/* ---------- 5. Tips: diagonal pair, resolved via one saturated neighbour ---------- */
+setupDemo('demo-tip-diag', 'd-tip-diag', {
+  baseSpec: `
+    U- U- U- U-
+    U- U9 U- U-
+    U- U- U4 U-
+    U- U- U- U-`,
+  boxOpts: { size: 34, box: [0, 0, 3, 3] },
+  animate({ grid, box, instant, isCurrent }) {
+    const tiles = tileEls(grid);
+    const idx = (r, c) => r * 4 + c;
+    const satBlock = [0, 1, 2].flatMap((r) => [0, 1, 2].map((c) => ({ r, c, state: 'L' })));
+    const leftover = [
+      { r: 1, c: 3, state: 'D' }, { r: 2, c: 3, state: 'D' },
+      { r: 3, c: 1, state: 'D' }, { r: 3, c: 2, state: 'D' }, { r: 3, c: 3, state: 'D' },
+    ];
+    const apply = (t) => { const tile = tiles[idx(t.r, t.c)]; setTile(tile, { state: t.state }); return tile; };
+    if (instant) {
+      if (box) box.style.opacity = 1;
+      [...satBlock, ...leftover].forEach((t) => apply(t).classList.add('mark'));
+      return;
+    }
+    setTimeout(() => { if (isCurrent() && box) { box.style.opacity = 1; pulse(box, 'enter'); } }, 300);
+    satBlock.forEach((t, i) => setTimeout(() => {
+      if (!isCurrent()) return;
+      const tile = apply(t);
+      popTile(tile);
+      setTimeout(() => { if (isCurrent()) tile.classList.add('mark'); }, 200);
+    }, 700 + i * 110));
+    const after = 700 + satBlock.length * 110 + 300;
+    leftover.forEach((t, i) => setTimeout(() => {
+      if (!isCurrent()) return;
+      const tile = apply(t);
+      popTile(tile);
+      setTimeout(() => { if (isCurrent()) tile.classList.add('mark'); }, 200);
+    }, after + i * 150));
+  },
+});
+
+/* ---------- 5. Tips: equal clues link two columns without filling either ---------- */
+setupDemo('demo-tip-equal', 'd-tip-equal', {
+  baseSpec: `
+    U- U- U- U-
+    U- U5 U5 U-
+    U- U- U- U-`,
+  boxOpts: { size: 36 },
+  animate({ grid, instant, isCurrent }) {
+    const tiles = tileEls(grid);
+    const clueLeft = tiles[5];
+    const clueRight = tiles[6];
+    const boxL = addBox(grid, [0, 0, 3, 1]);
+    const boxR = addBox(grid, [0, 3, 3, 1]);
+    if (instant) {
+      boxL.style.opacity = 1;
+      boxR.style.opacity = 1;
+      pulse(clueLeft, 'ring');
+      pulse(clueRight, 'ring');
+      return;
+    }
+    setTimeout(() => { if (isCurrent()) { boxL.style.opacity = 1; pulse(boxL, 'enter'); } }, 400);
+    setTimeout(() => { if (isCurrent()) { boxR.style.opacity = 1; pulse(boxR, 'enter'); } }, 650);
+    setTimeout(() => {
+      if (!isCurrent()) return;
+      pulse(clueLeft, 'ring');
+      pulse(clueRight, 'ring');
+    }, 1200);
   },
 });
 
