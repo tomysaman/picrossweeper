@@ -170,6 +170,51 @@
 
   footer { color: var(--footer); font-size: 13px; margin-top: 50px; text-align: center; }
   footer a { color: inherit; }
+
+  /* ---------- Motion: scroll-reveal for body copy ---------- */
+  .reveal { opacity: 0; transform: translateY(16px); transition: opacity .5s cubic-bezier(.2,0,0,1), transform .5s cubic-bezier(.2,0,0,1); }
+  .reveal.in-view { opacity: 1; transform: translateY(0); }
+
+  /* ---------- Motion: animated demo blocks (rule / move1 / move2 / done-state / hero) ---------- */
+  .demo-block { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: 22px 0; }
+  .demo-row { display: flex; flex-wrap: wrap; gap: 22px; align-items: center; justify-content: center; }
+  .demo-block .t, #hero-board .t {
+    transition: background-color .32s cubic-bezier(.2,0,0,1), color .25s ease, box-shadow .25s ease;
+  }
+  .demo-block .t.pop, #hero-board .t.pop { animation: tilePop .4s cubic-bezier(.34,1.56,.64,1); }
+  @keyframes tilePop { 0% { transform: scale(.82); } 55% { transform: scale(1.1); } 100% { transform: scale(1); } }
+  .demo-block .t.settle, #hero-board .t.settle { animation: tileSettle .32s ease; }
+  @keyframes tileSettle { 0% { transform: scale(1); } 40% { transform: scale(.9); } 100% { transform: scale(1); } }
+  .demo-block .box { transition: none; }
+  .demo-block .box.enter { animation: boxIn .4s cubic-bezier(.2,0,0,1); }
+  @keyframes boxIn { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: scale(1); } }
+
+  .counter {
+    display: inline-flex; flex-direction: column; align-items: center; gap: 2px;
+    background: var(--panel); border-radius: 10px; padding: 8px 20px;
+  }
+  .counter-num { font-size: 28px; font-weight: bold; color: var(--accent); line-height: 1; }
+  .counter-num.bump { animation: tilePop .3s cubic-bezier(.34,1.56,.64,1); }
+  .counter-label { font-size: 12px; color: var(--muted); }
+  .counter.match { animation: ringPulse .7s ease; border-radius: 10px; }
+  .t.ring { animation: ringPulse .7s ease; }
+  @keyframes ringPulse { 0%, 100% { box-shadow: none; } 35% { box-shadow: 0 0 0 4px var(--accent); } }
+
+  .replay {
+    font: inherit; font-size: 13px; background: var(--btn); color: var(--muted);
+    border: 1px solid var(--btn-border); border-radius: 6px; padding: 4px 12px; cursor: pointer;
+  }
+  .replay:hover { background: var(--btn-hover); color: var(--ink); }
+
+  .hero-demo { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: 26px 0; }
+  #hero-board { --t: 22px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .reveal { opacity: 1 !important; transform: none !important; transition: none !important; }
+    .demo-block .t, #hero-board .t, .demo-block .box, .counter-num { transition: none !important; }
+    .demo-block .t.pop, #hero-board .t.pop, .demo-block .t.settle, #hero-board .t.settle,
+    .demo-block .box.enter, .counter-num.bump, .counter.match, .t.ring { animation: none !important; }
+  }
 </style>
 </head>
 <body>
@@ -200,6 +245,11 @@
   Work out the colour of every tile and the hidden picture appears.
 </p>
 
+<div class="hero-demo">
+  <div class="grid" id="hero-board"></div>
+  <div class="step-label">the picture appearing from under the tiles, one clue's block at a time</div>
+</div>
+
 <figure>
   <img src="shots/game-screen.png" alt="The Picrossweeper board at the start of a puzzle: a 12×12 grid of grey tiles, some carrying numbers.">
   <figcaption>A fresh 12×12 puzzle. Every tile starts unknown (grey); the numbers are your only information.</figcaption>
@@ -212,15 +262,13 @@
   <b>counts itself</b>. That is the whole game.
 </p>
 
-<div class="flow">
-  <div>
+<div class="demo-block" id="demo-rule">
+  <div class="demo-row">
     <div class="grid" id="d-rule"></div>
-    <div class="step-label">the 3×3 block a clue can see</div>
+    <div class="counter"><span class="counter-num">0</span><span class="counter-label">lights counted</span></div>
   </div>
-  <div>
-    <div class="grid" id="d-rule2"></div>
-    <div class="step-label">4 light tiles in that block — including the clue tile itself</div>
-  </div>
+  <div class="step-label">watch the block fill in — the count lands on the clue's own number</div>
+  <button class="replay" type="button">↻ Replay</button>
 </div>
 
 <p>
@@ -298,16 +346,10 @@
   read here" signal, so you can skim past it and look for clues that still have unknowns around them.
 </p>
 
-<div class="flow">
-  <div>
-    <div class="grid" id="d-open"></div>
-    <div class="step-label">still has unknowns — digit is bold</div>
-  </div>
-  <span class="arrow">→</span>
-  <div>
-    <div class="grid" id="d-done"></div>
-    <div class="step-label">block fully marked — digit turns grey</div>
-  </div>
+<div class="demo-block" id="demo-open">
+  <div class="grid" id="d-open"></div>
+  <div class="step-label">the last unknown in its block gets marked — the digit fades to grey</div>
+  <button class="replay" type="button">↻ Replay</button>
 </div>
 
 <p class="muted">
@@ -327,16 +369,10 @@
     Look at one clue and count what you know. If the lights it still needs equals the number of unknown
     tiles left in its block, <b>all of them are light</b>. If it needs none, <b>all of them are dark</b>.
   </p>
-  <div class="flow">
-    <div>
-      <div class="grid" id="d-r1a"></div>
-      <div class="step-label">needs 3, the clue tile is the only light so far, 2 unknowns left…</div>
-    </div>
-    <span class="arrow">→</span>
-    <div>
-      <div class="grid" id="d-r1b"></div>
-      <div class="step-label">…so both unknowns must be light</div>
-    </div>
+  <div class="demo-block" id="demo-r1">
+    <div class="grid" id="d-r1a"></div>
+    <div class="step-label">needs 3, the clue tile is the only light so far, 2 unknowns left — so both must be light</div>
+    <button class="replay" type="button">↻ Replay</button>
   </div>
   <p class="muted">
     The two extreme cases are the same move seen from each end: a <b>0</b> paints its whole block dark
@@ -351,16 +387,10 @@
     contributes, it contributes to both — so the <b>difference between the two numbers</b> has to come from
     the tiles only one of them can see.
   </p>
-  <div class="flow">
-    <div>
-      <div class="grid" id="d-r2a"></div>
-      <div class="step-label">6 and 3, side by side</div>
-    </div>
-    <span class="arrow">→</span>
-    <div>
-      <div class="grid" id="d-r2b"></div>
-      <div class="step-label">left column all light, right column all dark</div>
-    </div>
+  <div class="demo-block" id="demo-r2">
+    <div class="grid" id="d-r2a"></div>
+    <div class="step-label">6 and 3, side by side — the far-left column resolves light, the far-right dark</div>
+    <button class="replay" type="button">↻ Replay</button>
   </div>
   <p>
     The <b>6</b> sees the three left-hand columns; the <b>3</b> sees the three right-hand columns. They
@@ -487,19 +517,98 @@ function diagram(el, spec, opts = {}) {
 }
 const draw = (id, spec, opts) => diagram(document.getElementById(id), spec, opts);
 
-/* ---------- 1. The one rule ---------- */
-draw('d-rule', `
-  U- U- U- U- U-
-  U- U- U- U- U-
-  U- U- U4 U- U-
-  U- U- U- U- U-
-  U- U- U- U- U-`, { size: 34, box: [1, 1, 3, 3] });
-draw('d-rule2', `
-  D- D- D- D- D-
-  D- L- L- D- D-
-  D- D- L4 D- D-
-  D- L- D- D- D-
-  D- D- D- D- D-`, { size: 34, box: [1, 1, 3, 3] });
+/* ---------- Motion helpers, shared by every animated demo below ---------- */
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const tileEls = (grid) => [...grid.querySelectorAll('.t')];
+function setTile(tile, { state, content } = {}) {
+  if (state) {
+    tile.classList.remove('light', 'dark');
+    if (state === 'L') tile.classList.add('light');
+    else if (state === 'D') tile.classList.add('dark');
+  }
+  if (content !== undefined) {
+    if (content >= '0' && content <= '9') { tile.textContent = content; tile.classList.add('has-num'); }
+    else { tile.textContent = ''; tile.classList.remove('has-num'); }
+  }
+}
+const pulse = (el, cls) => { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); };
+const popTile = (t) => pulse(t, 'pop');
+const settleTile = (t) => pulse(t, 'settle');
+
+/* setupDemo wires one animated diagram to: draw its resting frame, replay on click, and
+   auto-play once when scrolled into view. A generation token guards every setTimeout so an
+   impatient click on Replay can never let two timelines write into the same tiles at once. */
+function setupDemo(containerId, gridId, { baseSpec, boxOpts, animate }) {
+  const container = document.getElementById(containerId);
+  const grid = document.getElementById(gridId);
+  let gen = 0;
+  function reset() {
+    draw(gridId, baseSpec, boxOpts);
+    const box = grid.querySelector('.box');
+    if (box) box.style.opacity = 0;
+    return box;
+  }
+  function play() {
+    const my = ++gen;
+    const box = reset();
+    animate({ grid, box, instant: reduceMotion, isCurrent: () => my === gen });
+  }
+  reset();
+  container.querySelector('.replay')?.addEventListener('click', play);
+  new IntersectionObserver((entries, obs) => {
+    entries.forEach((e) => { if (e.isIntersecting) { play(); obs.unobserve(e.target); } });
+  }, { threshold: 0.4 }).observe(container);
+}
+
+/* ---------- 1. The one rule: the block fills in and the counter lands on the clue's digit ---------- */
+const RULE_BLOCK = [
+  { r: 1, c: 1, state: 'L' }, { r: 1, c: 2, state: 'L' }, { r: 1, c: 3, state: 'D' },
+  { r: 2, c: 1, state: 'D' }, { r: 2, c: 2, state: 'L' }, { r: 2, c: 3, state: 'D' },
+  { r: 3, c: 1, state: 'L' }, { r: 3, c: 2, state: 'D' }, { r: 3, c: 3, state: 'D' },
+];
+setupDemo('demo-rule', 'd-rule', {
+  baseSpec: `
+    U- U- U- U- U-
+    U- U- U- U- U-
+    U- U- U4 U- U-
+    U- U- U- U- U-
+    U- U- U- U- U-`,
+  boxOpts: { size: 34, box: [1, 1, 3, 3] },
+  animate({ grid, box, instant, isCurrent }) {
+    const tiles = tileEls(grid);
+    const idx = (r, c) => r * 5 + c;
+    const counterNum = document.querySelector('#demo-rule .counter-num');
+    const counterChip = document.querySelector('#demo-rule .counter');
+    let count = 0;
+    const reveal = (step) => {
+      setTile(tiles[idx(step.r, step.c)], { state: step.state });
+      if (step.state === 'L') {
+        count++;
+        if (counterNum) counterNum.textContent = String(count);
+      }
+    };
+    if (instant) {
+      if (box) box.style.opacity = 1;
+      RULE_BLOCK.forEach(reveal);
+      return;
+    }
+    setTimeout(() => { if (isCurrent() && box) { box.style.opacity = 1; pulse(box, 'enter'); } }, 300);
+    RULE_BLOCK.forEach((step, i) => setTimeout(() => {
+      if (!isCurrent()) return;
+      reveal(step);
+      const tile = tiles[idx(step.r, step.c)];
+      popTile(tile);
+      if (step.state === 'L' && counterNum) bump(counterNum);
+    }, 700 + i * 230));
+    const total = 700 + RULE_BLOCK.length * 230;
+    setTimeout(() => {
+      if (!isCurrent()) return;
+      pulse(tiles[idx(2, 2)], 'ring');
+      if (counterChip) pulse(counterChip, 'match');
+    }, total + 250);
+  },
+});
+function bump(el) { pulse(el, 'bump'); }
 
 /* ---------- 2. The 0–9 gallery ----------
    Each entry is 9 cells of the clue's own 3×3 block, '#' light and '.' dark; the digit shown is
@@ -556,34 +665,199 @@ draw('d-inner', `
   U- U- U- U-`, { size: 30, box: [0, 0, 3, 3] });
 
 /* ---------- 3. Bold digit vs finished grey digit ---------- */
-draw('d-open', `
-  D- L- U-
-  D- L3 U-
-  D- D- U-`, { size: 36 });
-draw('d-done', `
-  D- L- D-
-  D- L3~ L-
-  D- D- D-`, { size: 36 });
+setupDemo('demo-open', 'd-open', {
+  baseSpec: `
+    D- L- U-
+    D- L3 U-
+    D- D- U-`,
+  boxOpts: { size: 36 },
+  animate({ grid, instant, isCurrent }) {
+    const tiles = tileEls(grid);
+    const idx = (r, c) => r * 3 + c;
+    const clue = tiles[idx(1, 1)];
+    const steps = [{ r: 0, c: 2, state: 'D' }, { r: 1, c: 2, state: 'L' }, { r: 2, c: 2, state: 'D' }];
+    if (instant) {
+      steps.forEach((s) => setTile(tiles[idx(s.r, s.c)], { state: s.state }));
+      clue.classList.add('done');
+      return;
+    }
+    steps.forEach((s, i) => setTimeout(() => {
+      if (!isCurrent()) return;
+      const tile = tiles[idx(s.r, s.c)];
+      setTile(tile, { state: s.state });
+      popTile(tile);
+    }, 500 + i * 260));
+    setTimeout(() => {
+      if (!isCurrent()) return;
+      clue.classList.add('done');
+      settleTile(clue);
+    }, 500 + steps.length * 260 + 200);
+  },
+});
 
 /* ---------- 4. Move 1: the clue is already decided ---------- */
-draw('d-r1a', `
-  D- D- D-
-  D- L3 U-
-  D- U- D-`, { size: 36 });
-draw('d-r1b', `
-  D- D- D-
-  D- L3~ L-*
-  D- L-* D-`, { size: 36 });
+setupDemo('demo-r1', 'd-r1a', {
+  baseSpec: `
+    D- D- D-
+    D- L3 U-
+    D- U- D-`,
+  boxOpts: { size: 36 },
+  animate({ grid, instant, isCurrent }) {
+    const tiles = tileEls(grid);
+    const idx = (r, c) => r * 3 + c;
+    const clue = tiles[idx(1, 1)];
+    const targets = [{ r: 1, c: 2 }, { r: 2, c: 1 }];
+    if (instant) {
+      targets.forEach((t) => { const tile = tiles[idx(t.r, t.c)]; setTile(tile, { state: 'L' }); tile.classList.add('mark'); });
+      clue.classList.add('done');
+      return;
+    }
+    targets.forEach((t, i) => setTimeout(() => {
+      if (!isCurrent()) return;
+      const tile = tiles[idx(t.r, t.c)];
+      setTile(tile, { state: 'L' });
+      popTile(tile);
+      setTimeout(() => { if (isCurrent()) tile.classList.add('mark'); }, 220);
+    }, 500 + i * 260));
+    setTimeout(() => {
+      if (!isCurrent()) return;
+      clue.classList.add('done');
+      settleTile(clue);
+    }, 500 + targets.length * 260 + 300);
+  },
+});
 
 /* ---------- 4. Move 2: comparing two overlapping clues ---------- */
-draw('d-r2a', `
-  U- U- U- U-
-  U- U6 U3 U-
-  U- U- U- U-`, { size: 36 });
-draw('d-r2b', `
-  L-* U- U- D-*
-  L-* U6 U3 D-*
-  L-* U- U- D-*`, { size: 36 });
+setupDemo('demo-r2', 'd-r2a', {
+  baseSpec: `
+    U- U- U- U-
+    U- U6 U3 U-
+    U- U- U- U-`,
+  boxOpts: { size: 36 },
+  animate({ grid, instant, isCurrent }) {
+    const tiles = tileEls(grid);
+    const idx = (r, c) => r * 4 + c;
+    const left = [0, 1, 2].map((r) => ({ r, c: 0, state: 'L' }));
+    const right = [0, 1, 2].map((r) => ({ r, c: 3, state: 'D' }));
+    const apply = (t) => { const tile = tiles[idx(t.r, t.c)]; setTile(tile, { state: t.state }); return tile; };
+    if (instant) {
+      [...left, ...right].forEach((t) => apply(t).classList.add('mark'));
+      return;
+    }
+    left.forEach((t, i) => setTimeout(() => {
+      if (!isCurrent()) return;
+      const tile = apply(t);
+      popTile(tile);
+      setTimeout(() => { if (isCurrent()) tile.classList.add('mark'); }, 200);
+    }, 500 + i * 180));
+    const afterLeft = 500 + left.length * 180 + 300;
+    right.forEach((t, i) => setTimeout(() => {
+      if (!isCurrent()) return;
+      const tile = apply(t);
+      popTile(tile);
+      setTimeout(() => { if (isCurrent()) tile.classList.add('mark'); }, 200);
+    }, afterLeft + i * 180));
+  },
+});
+
+/* ---------- Hero: a tiny board revealing the picture under it, looping ---------- */
+(function heroBoard() {
+  const W = 9, H = 8;
+  const HEART = [
+    0, 1, 1, 0, 0, 0, 1, 1, 0,
+    1, 1, 1, 1, 0, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 1, 1, 1, 1, 1, 1, 1, 0,
+    0, 0, 1, 1, 1, 1, 1, 0, 0,
+    0, 0, 0, 1, 1, 1, 0, 0, 0,
+  ];
+  const at = (r, c) => HEART[r * W + c];
+  const isClue = (r, c) => (r * W + c) % 2 === 0;
+  const clueCount = (r, c) => {
+    let n = 0;
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      const rr = r + dr, cc = c + dc;
+      if (rr >= 0 && rr < H && cc >= 0 && cc < W && at(rr, cc)) n++;
+    }
+    return n;
+  };
+  const rows = [];
+  for (let r = 0; r < H; r++) {
+    const cells = [];
+    for (let c = 0; c < W; c++) cells.push('U' + (isClue(r, c) ? String(clueCount(r, c)) : '-'));
+    rows.push(cells.join(' '));
+  }
+  const baseSpec = rows.join(' / ');
+  const stagger = 42, doneBuffer = 180;
+  const doneIndex = (r, c) => Math.min(r + 1, H - 1) * W + Math.min(c + 1, W - 1);
+  const grid = document.getElementById('hero-board');
+
+  let gen = 0;
+  function play() {
+    const my = ++gen;
+    draw('hero-board', baseSpec);
+    const tiles = tileEls(grid);
+    if (reduceMotion) {
+      for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+        const tile = tiles[r * W + c];
+        setTile(tile, { state: at(r, c) ? 'L' : 'D' });
+        if (isClue(r, c)) tile.classList.add('done');
+      }
+      return;
+    }
+    let lastDone = 0;
+    for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+      const i = r * W + c, tile = tiles[i];
+      setTimeout(() => {
+        if (my !== gen) return;
+        setTile(tile, { state: at(r, c) ? 'L' : 'D' });
+        popTile(tile);
+      }, i * stagger);
+      if (isClue(r, c)) {
+        const t = doneIndex(r, c) * stagger + doneBuffer;
+        lastDone = Math.max(lastDone, t);
+        setTimeout(() => {
+          if (my !== gen) return;
+          tile.classList.add('done');
+          settleTile(tile);
+        }, t);
+      }
+    }
+    setTimeout(() => { if (my === gen) play(); }, lastDone + 2200);
+  }
+  play();
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) gen++;
+    else if (!reduceMotion) play();
+  });
+})();
+
+/* ---------- Motion: fade body copy up into place as it scrolls into view ---------- */
+if (!reduceMotion) {
+  const revealTargets = [...document.querySelectorAll(
+    '.page > h2, .page > p, .page > figure, .page > .flow, .page > table, .page > .two-up, .page > .hero-demo, .panelbox > h3, .panelbox > p'
+  )];
+  revealTargets.forEach((el) => el.classList.add('reveal'));
+  const revealIO = new IntersectionObserver((entries) => {
+    entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('in-view'); revealIO.unobserve(e.target); } });
+  }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+  revealTargets.forEach((el) => revealIO.observe(el));
+
+  const cards = [...document.querySelectorAll('#gallery .card')];
+  cards.forEach((c) => c.classList.add('reveal'));
+  const cardIO = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (!e.isIntersecting) return;
+      const i = cards.indexOf(e.target);
+      e.target.style.transitionDelay = Math.min(i * 35, 300) + 'ms';
+      e.target.classList.add('in-view');
+      cardIO.unobserve(e.target);
+    });
+  }, { threshold: 0.2 });
+  cards.forEach((c) => cardIO.observe(c));
+}
 </script>
 </body>
 </html>
