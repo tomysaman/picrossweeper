@@ -110,6 +110,13 @@
   @keyframes blink { 50% { opacity: .35; } }
   #minimap { right: 10px; bottom: 10px; padding: 4px; pointer-events: auto; cursor: pointer; line-height: 0; }
   #minimap canvas { display: block; image-rendering: pixelated; border-radius: 4px; }
+  #minimapClose {
+    position: absolute; top: -7px; right: -7px; width: 18px; height: 18px; padding: 0;
+    display: flex; align-items: center; justify-content: center; line-height: 1;
+    border-radius: 50%; background: var(--panel); border: 1px solid var(--btn-border);
+    color: var(--muted); font-size: 11px; cursor: pointer;
+  }
+  #minimapClose:hover { background: var(--bad); color: #fff; border-color: var(--bad); }
   #loading { left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 16px; color: var(--ink); padding: 14px 22px; }
   #help {
     right: 10px; top: 10px; max-width: 360px; pointer-events: auto; line-height: 1.5;
@@ -180,7 +187,7 @@
   <canvas id="view"></canvas>
   <div id="nowPlaying" class="overlay"></div>
   <div id="status" class="overlay"></div>
-  <div id="minimap" class="overlay"><canvas id="minimapCanvas"></canvas></div>
+  <div id="minimap" class="overlay"><canvas id="minimapCanvas"></canvas><button id="minimapClose" title="Hide preview (P)">✕</button></div>
   <div id="loading" class="overlay">Loading picture…</div>
   <div id="help" class="overlay" hidden>
     <b>One giant picture, hundreds of regions.</b> The whole painting is one grid, cut into <b>regions</b> of random shapes and sizes (outlined).
@@ -950,6 +957,8 @@ $('minimap').addEventListener('pointerdown', e => {
   const b = mini.getBoundingClientRect(); const tx = (e.clientX - b.left) / b.width * G.W, ty = (e.clientY - b.top) / b.height * G.H;
   view.ox = canvas.clientWidth / 2 - tx * view.scale; view.oy = canvas.clientHeight / 2 - ty * view.scale; clampView(); requestDraw();
 });
+$('minimapClose').addEventListener('pointerdown', e => e.stopPropagation());
+$('minimapClose').addEventListener('click', e => { e.stopPropagation(); $('previewBtn').click(); });
 
 function updateStatus() {
   if (!G) return;
