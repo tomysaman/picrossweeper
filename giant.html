@@ -150,6 +150,7 @@
     <button id="panBtn" title="Pan tool (hold Space or drag with middle mouse also pans)">✋ Pan</button>
     <button id="fitBtn" title="Zoom to fit (F)">Fit</button>
     <button id="modeBtn" title="Which colour a left-click / tap paints (X)">Tap: ☀ light</button>
+    <button id="previewBtn" title="Show/hide the minimap preview (P)">🗺 Preview</button>
   </span>
   <span class="group">
     <button id="checkBtn" title="Highlight mistakes in the current region">Check</button>
@@ -189,7 +190,7 @@
     <span class="sw" style="background:var(--light)"></span>Left‑click / drag: light &nbsp;
     <span class="sw" style="background:var(--dark)"></span>Right‑click / drag: dark &nbsp; click again: clear<br>
     <b>Move around:</b> mouse wheel zooms · middle‑drag, <kbd>Space</kbd>+drag or the ✋ tool pans · arrows or <kbd>WASD</kbd> pan · <kbd>F</kbd> fits · pinch on touch · click the minimap to jump.<br>
-    <b>Keys:</b> <kbd>Ctrl+Z</kbd> undo · <kbd>X</kbd> tap colour · <kbd>M</kbd> music · <kbd>[</kbd>/<kbd>]</kbd> prev/next track · <kbd>?</kbd> this panel.<br>
+    <b>Keys:</b> <kbd>Ctrl+Z</kbd> undo · <kbd>X</kbd> tap colour · <kbd>P</kbd> show/hide preview · <kbd>M</kbd> music · <kbd>[</kbd>/<kbd>]</kbd> prev/next track · <kbd>?</kbd> this panel.<br>
     Progress is saved automatically in this browser, per picture. Choose “Your own image…” to play any wallpaper.
   </div>
 </main>
@@ -936,6 +937,7 @@ function draw() {
   drawMinimap();
 }
 function drawMinimap() {
+  if (!previewOn) return;
   const mw = 180, mh = Math.max(20, Math.round(mw * G.H / G.W));
   if (mini.width !== mw || mini.height !== mh) { mini.width = mw; mini.height = mh; }
   mctx.imageSmoothingEnabled = false;
@@ -1010,6 +1012,7 @@ document.addEventListener('keydown', e => {
   if (e.key === '[') $('prevBtn').click();
   if (e.key === ']') $('nextBtn').click();
   if (e.key === 'f') fitView();
+  if (e.key === 'p') $('previewBtn').click();
   if (e.key === '?') $('helpBtn').click();
   if (e.key === '+' || e.key === '=') zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, 1.25);
   if (e.key === '-') zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, 0.8);
@@ -1033,6 +1036,18 @@ panBtn.onclick = () => { panTool = !panTool; panBtn.classList.toggle('active', p
 $('fitBtn').onclick = fitView;
 modeBtn.onclick = () => { tapMode = tapMode === LIGHT ? DARK : LIGHT; modeBtn.textContent = tapMode === LIGHT ? 'Tap: ☀ light' : 'Tap: ✕ dark'; };
 $('helpBtn').onclick = () => { $('help').hidden = !$('help').hidden; };
+let previewOn = true;
+try { previewOn = localStorage.getItem('pw.preview') !== '0'; } catch {}
+function applyPreview() {
+  $('minimap').hidden = !previewOn;
+  $('previewBtn').classList.toggle('active', previewOn);
+}
+$('previewBtn').onclick = () => {
+  previewOn = !previewOn;
+  try { localStorage.setItem('pw.preview', previewOn ? '1' : '0'); } catch {}
+  applyPreview();
+};
+applyPreview();
 $('clearBtn').onclick = () => {
   if (!G || G.done[currentRegion]) return;
   if (!confirm(`Clear all marks in region ${currentRegion + 1}?`)) return;
