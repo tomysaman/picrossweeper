@@ -34,6 +34,7 @@
     --region-line: rgba(0,0,0,.7);
     --bad: #c9503f;
     --good: #7fb069;
+    --warn: #a682d1;
     --shadow: rgba(0,0,0,.4);
   }
   :root[data-theme="proverbs"] {
@@ -64,6 +65,7 @@
     --region-line: rgba(0,0,0,.7);
     --bad: #f78e55;
     --good: #f78e55;
+    --warn: #5ec9d1;
     --shadow: rgba(0,0,0,.45);
   }
   :root[data-theme="nocturne"] {
@@ -93,6 +95,7 @@
     --region-line: rgba(0,0,0,.75);
     --bad: #e5636b;
     --good: #4fd1c5;
+    --warn: #e0a458;
     --shadow: rgba(0,0,0,.5);
   }
   :root[data-theme="dracula"] {
@@ -123,6 +126,7 @@
     --region-line: rgba(0,0,0,.75);
     --bad: #ff5555;
     --good: #50fa7b;
+    --warn: #ffb86c;
     --shadow: rgba(0,0,0,.55);
   }
   :root[data-theme="neon"] {
@@ -152,6 +156,7 @@
     --region-line: rgba(0,229,255,.55);
     --bad: #ff3864;
     --good: #39ff88;
+    --warn: #ffe066;
     --shadow: rgba(0,229,255,.18);
   }
 
@@ -585,7 +590,7 @@ function readThemeColours() {
   C = { unknown: v('--unknown'), light: v('--light'), dark: v('--dark'), xmark: v('--x-mark'),
         clue: { [UNK]: v('--clue-on-unknown'), [LIGHT]: v('--clue-on-light'), [DARK]: v('--clue-on-dark') },
         clueDone: { [UNK]: v('--clue-done-on-unknown'), [LIGHT]: v('--clue-done-on-light'), [DARK]: v('--clue-done-on-dark') },
-        gridLine: v('--grid-line'), regionLine: v('--region-line'), bad: v('--bad'), accent: v('--accent'), bg: v('--bg') };
+        gridLine: v('--grid-line'), regionLine: v('--region-line'), bad: v('--bad'), warn: v('--warn'), accent: v('--accent'), bg: v('--bg') };
   // Parse tile colours to RGB once for the pixel buffer.
   const probe = document.createElement('canvas').getContext('2d');
   const rgb = col => { probe.fillStyle = col; const s = probe.fillStyle; return [parseInt(s.slice(1, 3), 16), parseInt(s.slice(3, 5), 16), parseInt(s.slice(5, 7), 16)]; };
@@ -605,7 +610,7 @@ themeSel.onchange = () => applyTheme(themeSel.value);
 let G = null;            // the giant grid
 let history = [];
 let tapMode = LIGHT, panTool = false, spaceHeld = false;
-let wrongSet = new Set(), hinted = -1, hintAt = 0, currentRegion = 0;
+let wrongSet = new Set(), autoBadClues = new Set(), hinted = -1, hintAt = 0, currentRegion = 0;
 const HINT_PULSE_MS = 900, HINT_PULSES = 1;   // matches the single-puzzle board's CSS pulse
 const view = { scale: 8, ox: 0, oy: 0 };
 
@@ -677,6 +682,8 @@ function buildGame(img, key, totalTiles, diffName) {
   const touched = new Uint8Array(count); for (let g = 0; g < N; g++) if (G.marks[g] !== UNK) touched[rid[g]] = 1;
   for (let r = 0; r < count; r++) if (touched[r]) ensureRegion(r);
   for (let r = 0; r < count; r++) G.done[r] = touched[r] && regionComplete(r) ? 1 : 0;
+  autoBadClues.clear();
+  for (let r = 0; r < count; r++) if (touched[r] && !G.done[r]) updateAutoBad(r);
   repaintAll();
   history = []; wrongSet.clear(); hinted = -1;
   fitView();
@@ -880,6 +887,23 @@ function clueDone(g) {  // every tile in the (region-clipped) 3×3 block is mark
   for (const j of R.nb[G.localIdx[g]]) if (G.marks[cells[j]] === UNK) return false;
   return true;
 }
+// Flag a clue tile (in the theme's warn colour) the moment its block already has more light tiles
+// than its number allows, or so many dark tiles that the number can no longer be reached —
+// checked after every mark, whether or not the block is fully filled in yet. Pointing at the clue
+// rather than at which of its tiles is wrong.
+function updateAutoBad(r) {
+  const R = G.reg[r];
+  if (!R.clues) return;
+  const cells = R.cells;
+  for (let li = 0; li < cells.length; li++) {
+    const v = R.clues[li];
+    if (v < 0) continue;
+    const g = cells[li], nbrs = R.nb[li];
+    let lit = 0, dark = 0;
+    for (const j of nbrs) { const m = G.marks[cells[j]]; if (m === LIGHT) lit++; else if (m === DARK) dark++; }
+    if (lit > v || dark > nbrs.length - v) autoBadClues.add(g); else autoBadClues.delete(g);
+  }
+}
 
 // ---------- pixel buffer (1 px per tile) ----------
 function paintTile(g) {
@@ -900,6 +924,7 @@ function setMark(g, v, record = true) {
   ensureRegion(r);                             // fix the region's clues/target before the first mark lands
   if (record) history.push([g, G.marks[g]]);
   G.marks[g] = v; wrongSet.delete(g);
+  updateAutoBad(r);
   paintTile(g);
   if (regionComplete(r)) { G.done[r] = 1; repaintRegion(r); setStatus(`<b>Region ${r + 1} revealed!</b> ${doneCount()} of ${G.count} regions complete`, 'win'); }
   else flushPix();
@@ -1005,6 +1030,8 @@ function draw() {
   if (s >= 4) {
     ctx.lineWidth = Math.max(2, s * 0.15); ctx.strokeStyle = C.bad;
     for (const g of wrongSet) ctx.strokeRect(sx(g % G.W) + 1, sy((g / G.W) | 0) + 1, s - 2, s - 2);
+    ctx.strokeStyle = C.warn;
+    for (const g of autoBadClues) if (!wrongSet.has(g)) ctx.strokeRect(sx(g % G.W) + 1, sy((g / G.W) | 0) + 1, s - 2, s - 2);
     // current region outline, traced along its true edge
     const rid = G.rid, W = G.W, H = G.H, cr = currentRegion;
     ctx.strokeStyle = C.accent; ctx.lineWidth = 2.5; ctx.globalAlpha = .9; ctx.beginPath();
@@ -1153,12 +1180,12 @@ $('clearBtn').onclick = () => {
   if (!G || G.done[currentRegion]) return;
   if (!confirm(`Clear all marks in region ${currentRegion + 1}?`)) return;
   for (const g of regionCells(currentRegion)) setMark(g, UNK);
-  wrongSet.clear(); updateStatus();
+  wrongSet.clear(); autoBadClues.clear(); updateStatus();
 };
 $('resetBtn').onclick = () => {
   if (!G) return;
   if (!confirm('Erase all saved progress for this picture?')) return;
-  G.marks.fill(UNK); G.done.fill(0); history = []; wrongSet.clear(); hinted = -1;
+  G.marks.fill(UNK); G.done.fill(0); history = []; wrongSet.clear(); autoBadClues.clear(); hinted = -1;
   try { localStorage.removeItem(saveKey()); } catch {}
   repaintAll(); requestDraw(); updateStatus();
 };

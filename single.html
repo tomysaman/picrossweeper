@@ -34,6 +34,7 @@
     --clue-done-on-unknown: #877b69;
     --bad: #c9503f;
     --good: #7fb069;
+    --warn: #a682d1;
     --shadow: rgba(0,0,0,.4);
   }
   :root[data-theme="proverbs"] {
@@ -64,6 +65,7 @@
     --clue-done-on-unknown: #6d719a;
     --bad: #733840;
     --good: #f78e55;
+    --warn: #5ec9d1;
     --shadow: rgba(0,0,0,.45);
   }
   :root[data-theme="nocturne"] {
@@ -93,6 +95,7 @@
     --clue-done-on-unknown: #7d8894;
     --bad: #e5636b;
     --good: #4fd1c5;
+    --warn: #e0a458;
     --shadow: rgba(0,0,0,.5);
   }
   :root[data-theme="dracula"] {
@@ -123,6 +126,7 @@
     --clue-done-on-unknown: #7c809a;
     --bad: #ff5555;
     --good: #50fa7b;
+    --warn: #ffb86c;
     --shadow: rgba(0,0,0,.55);
   }
   :root[data-theme="neon"] {
@@ -152,6 +156,7 @@
     --clue-done-on-unknown: #5a6a85;
     --bad: #ff3864;
     --good: #39ff88;
+    --warn: #ffe066;
     --shadow: rgba(0,229,255,.18);
   }
   * { box-sizing: border-box; }
@@ -239,6 +244,8 @@
   }
   .cell.dark.clue::after { display: none; }
   .cell.wrong { box-shadow: inset 0 0 0 3px var(--bad); }
+  /* A clue whose neighbourhood already rules out its own number — distinct from Check's red. */
+  .cell.impossible { box-shadow: inset 0 0 0 3px var(--warn); }
   /* All surrounding tiles marked: only the digit changes, the tile colour stays as-is. */
   .cell.satisfied        { color: var(--clue-done-on-unknown); }
   .cell.satisfied.light  { color: var(--clue-done-on-light); }
@@ -647,10 +654,21 @@ function refresh() {
     d.classList.toggle('light', marks[i] === LIGHT);
     d.classList.toggle('dark', marks[i] === DARK);
     d.classList.remove('wrong');
+    d.classList.remove('impossible');
     if (clues[i] >= 0) {
       // "Done" = every tile in the 3×3 block has been marked (regardless of correctness).
       d.classList.toggle('satisfied', nb[i].every(j => marks[j] !== UNK));
     }
+  }
+  // Flag a clue the moment its block already has more light tiles than its number allows,
+  // or so many dark tiles that the number can no longer be reached — checked after every mark,
+  // whether or not the block is fully filled in yet.
+  for (let i = 0; i < n * n; i++) {
+    if (clues[i] < 0) continue;
+    const v = clues[i], block = nb[i];
+    let lit = 0, dark = 0;
+    for (const j of block) { if (marks[j] === LIGHT) lit++; else if (marks[j] === DARK) dark++; }
+    if (lit > v || dark > block.length - v) cells[i].classList.add('impossible');
   }
   checkWin();
 }
