@@ -58,6 +58,84 @@
     --good: #f78e55;
     --shadow: rgba(0,0,0,.45);
   }
+  :root[data-theme="nocturne"] {
+    --bg: #1b1f26;
+    --panel: #262c35;
+    --ink: #e8edf2;
+    --muted: #a3adb8;
+    --footer: #6e7885;
+    --btn: #313944;
+    --btn-border: #4a5563;
+    --btn-hover: #3c4552;
+    --accent: #4fd1c5;
+    --accent-hover: #6ee0d5;
+    --on-accent: #1b1f26;
+    --unknown: #3a434f;
+    --light: #e3ecf3;
+    --dark: #123c47;
+    --x-mark: #6b8a99;
+    --clue-on-light: #101418;
+    --clue-on-dark: #d7e6ea;
+    --clue-on-unknown: #eef2f6;
+    --clue-done-on-light: #8a949e;
+    --clue-done-on-dark: #4e7079;
+    --clue-done-on-unknown: #7d8894;
+    --bad: #e5636b;
+    --good: #4fd1c5;
+    --shadow: rgba(0,0,0,.5);
+  }
+  :root[data-theme="dracula"] {
+    --bg: #282a36;
+    --panel: #21222c;
+    --ink: #f8f8f2;
+    --muted: #b4b8cc;
+    --footer: #6272a4;
+    --btn: #44475a;
+    --btn-border: #6272a4;
+    --btn-hover: #565a75;
+    --accent: #bd93f9;
+    --accent-hover: #cfb0ff;
+    --on-accent: #282a36;
+    --unknown: #3c3f52;
+    --light: #f8f8f2;
+    --dark: #4f3a8c;
+    --x-mark: #ff79c6;
+    --clue-on-light: #282a36;
+    --clue-on-dark: #f8f8f2;
+    --clue-on-unknown: #f8f8f2;
+    --clue-done-on-light: #9a9aa4;
+    --clue-done-on-dark: #9c8fc8;
+    --clue-done-on-unknown: #7c809a;
+    --bad: #ff5555;
+    --good: #50fa7b;
+    --shadow: rgba(0,0,0,.55);
+  }
+  :root[data-theme="neon"] {
+    --bg: #0b0f1a;
+    --panel: #131a2b;
+    --ink: #e6f7ff;
+    --muted: #8fb3c9;
+    --footer: #4f6b80;
+    --btn: #1c2740;
+    --btn-border: #2f4a6e;
+    --btn-hover: #263454;
+    --accent: #00e5ff;
+    --accent-hover: #5cf0ff;
+    --on-accent: #0b0f1a;
+    --unknown: #1b2438;
+    --light: #dffbff;
+    --dark: #3d1466;
+    --x-mark: #ff2bd6;
+    --clue-on-light: #0b0f1a;
+    --clue-on-dark: #f3e6ff;
+    --clue-on-unknown: #e6f7ff;
+    --clue-done-on-light: #7fa3ad;
+    --clue-done-on-dark: #8a6aa8;
+    --clue-done-on-unknown: #5a6a85;
+    --bad: #ff3864;
+    --good: #39ff88;
+    --shadow: rgba(0,229,255,.18);
+  }
 
   * { box-sizing: border-box; }
   html, body { margin: 0; }
@@ -230,6 +308,9 @@
       <select id="theme">
         <option value="tavern">Tavern</option>
         <option value="proverbs">Proverbs</option>
+        <option value="nocturne">Nocturne</option>
+        <option value="dracula">Dracula</option>
+        <option value="neon">Neon</option>
       </select>
     </label>
     <a class="btnlink" href="index.html">Home</a>
