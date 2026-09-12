@@ -653,6 +653,10 @@
     <div class="grid" id="d-warn-example"></div>
     <div class="step-label">Live check, accent colour: this 2 already has 3 light tiles around it</div>
   </div>
+  <div>
+    <div class="grid" id="d-warn-example2"></div>
+    <div class="step-label">Live check: this 3 already has 7 dark tiles around it — at most 2 tiles can still go light</div>
+  </div>
 </div>
 
 <h2><span class="step">7</span>Finishing</h2>
@@ -916,6 +920,10 @@ draw('d-warn-example', `
   L- L- U-
   L- U2^ U-
   U- U- U-`, { size: 34, box: [0, 0, 3, 3] });
+draw('d-warn-example2', `
+  D- D- D-
+  D- U3^ D-
+  D- D- U-`, { size: 34, box: [0, 0, 3, 3] });
 
 /* ---------- 3. Bold digit vs finished grey digit ---------- */
 setupDemo('demo-open', 'd-open', {
