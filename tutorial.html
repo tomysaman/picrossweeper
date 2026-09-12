@@ -220,6 +220,7 @@
   .t.done       { color: var(--clue-done-on-unknown); }
   .t.mark { box-shadow: 0 0 0 3px var(--accent); z-index: 2; }
   .t.bad  { box-shadow: inset 0 0 0 3px var(--bad); }
+  .t.warn { box-shadow: inset 0 0 0 3px var(--warn); }
   /* absolutely positioned so it overlays its grid area instead of taking up cells */
   .box { position: absolute; inset: 0; border: 2px dashed var(--accent); border-radius: 5px; pointer-events: none; margin: -3px; }
 
@@ -643,6 +644,17 @@
   off — click Check again to clear them and it picks back up.
 </p>
 
+<div class="flow">
+  <div>
+    <div class="grid" id="d-bad-example"></div>
+    <div class="step-label">Check, red: this tile is the wrong colour</div>
+  </div>
+  <div>
+    <div class="grid" id="d-warn-example"></div>
+    <div class="step-label">Live check, accent colour: this 2 already has 3 light tiles around it</div>
+  </div>
+</div>
+
 <h2><span class="step">7</span>Finishing</h2>
 
 <p>
@@ -709,8 +721,9 @@ themeSel.addEventListener('change', () => {
    A diagram is a string of rows (one per line, or separated by "/"), each row a run of 2-char tokens:
      state: L light · D dark · U unknown · X absent (renders nothing — used for edge/corner blocks)
      content: - none · 0-9 a clue digit
-   A trailing "*" on a token rings that tile in the accent colour, "!" marks it as a mistake,
-   and "~" renders the digit in the finished (grey) colour.                                      */
+   A trailing "*" on a token rings that tile in the accent colour, "!" marks it as a Check mistake
+   (red), "^" marks it as a live-check impossible clue (the theme's warn colour), and "~" renders
+   the digit in the finished (grey) colour.                                                      */
 function diagram(el, spec, opts = {}) {
   const rows = spec.trim().split(/[\n/]/).map(r => r.trim()).filter(Boolean).map(r => r.split(/\s+/));
   const cols = rows[0].length;
@@ -725,6 +738,7 @@ function diagram(el, spec, opts = {}) {
     if (content >= '0' && content <= '9') { d.textContent = content; d.classList.add('has-num'); }
     if (flags.includes('*')) d.classList.add('mark');
     if (flags.includes('!')) d.classList.add('bad');
+    if (flags.includes('^')) d.classList.add('warn');
     if (flags.includes('~')) d.classList.add('done');
     el.appendChild(d);
   }
@@ -892,6 +906,16 @@ draw('d-inner', `
   U- U4 U- U-
   U- U- U- U-
   U- U- U- U-`, { size: 30, box: [0, 0, 3, 3] });
+
+/* ---------- The two mistake outlines, side by side ---------- */
+draw('d-bad-example', `
+  L- L- D-
+  L- D-! L-
+  D- L- L-`, { size: 34 });
+draw('d-warn-example', `
+  L- L- U-
+  L- U2^ U-
+  U- U- U-`, { size: 34, box: [0, 0, 3, 3] });
 
 /* ---------- 3. Bold digit vs finished grey digit ---------- */
 setupDemo('demo-open', 'd-open', {
