@@ -239,6 +239,8 @@
   .flow { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; justify-content: center; margin: 18px 0; }
   .flow .arrow { color: var(--accent); font-size: 26px; }
   .step-label { text-align: center; color: var(--muted); font-size: 13px; margin-top: 8px; font-style: italic; }
+  /* keeps captions from growing wider than their grid and forcing a wrap onto a new row */
+  .mistake-examples > div { width: 168px; }
   .panelbox { background: var(--panel); border-radius: 10px; padding: 16px 20px; margin: 18px 0; }
   .panelbox h3 { margin-top: 0; }
 
@@ -644,18 +646,18 @@
   off — click Check again to clear them and it picks back up.
 </p>
 
-<div class="flow">
+<div class="flow mistake-examples">
   <div>
     <div class="grid" id="d-bad-example"></div>
     <div class="step-label">Check, red: this tile is the wrong colour</div>
   </div>
   <div>
     <div class="grid" id="d-warn-example"></div>
-    <div class="step-label">Live check, accent colour: this 2 already has 3 light tiles around it</div>
+    <div class="step-label">Live check: this 2 already has 3 light tiles around it</div>
   </div>
   <div>
     <div class="grid" id="d-warn-example2"></div>
-    <div class="step-label">Live check: this 3 already has 7 dark tiles around it — at most 2 tiles can still go light</div>
+    <div class="step-label">Live check: this 3 already has 7 dark tiles around it</div>
   </div>
 </div>
 
