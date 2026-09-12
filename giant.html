@@ -1192,6 +1192,8 @@ $('resetBtn').onclick = () => {
 $('checkBtn').onclick = () => {
   if (!G) return;
   wrongSet.clear();
+  // Clear this region's live "impossible clue" borders first so Check's red mistakes aren't confused with them.
+  for (const g of regionCells(currentRegion)) autoBadClues.delete(g);
   for (const g of regionCells(currentRegion)) if (G.marks[g] !== UNK && (G.marks[g] === LIGHT) !== (G.target[g] === 1)) wrongSet.add(g);
   setStatus(wrongSet.size ? `<b>${wrongSet.size} mistake${wrongSet.size > 1 ? 's' : ''}</b> highlighted in region ${currentRegion + 1}` : `<b>No mistakes</b> in region ${currentRegion + 1} so far`, wrongSet.size ? 'bad' : '');
   requestDraw();

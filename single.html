@@ -736,6 +736,8 @@ document.getElementById('clearBtn').onclick = () => {
 document.getElementById('checkBtn').onclick = () => {
   if (won) return;
   let wrong = 0;
+  // Clear the live "impossible clue" borders first so Check's red mistakes aren't confused with them.
+  for (const d of cells) d.classList.remove('impossible');
   for (let i = 0; i < marks.length; i++) {
     if (marks[i] === UNK) continue;
     if ((marks[i] === LIGHT) !== (puzzle.target[i] === 1)) { cells[i].classList.add('wrong'); wrong++; }
