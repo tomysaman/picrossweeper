@@ -30,6 +30,7 @@
     --clue-done-on-unknown: #877b69;
     --bad: #c9503f;
     --good: #7fb069;
+    --warn: #a682d1;
     --shadow: rgba(0,0,0,.4);
   }
   :root[data-theme="proverbs"] {
@@ -56,6 +57,7 @@
     --clue-done-on-unknown: #6d719a;
     --bad: #733840;
     --good: #f78e55;
+    --warn: #5ec9d1;
     --shadow: rgba(0,0,0,.45);
   }
   :root[data-theme="nocturne"] {
@@ -82,6 +84,7 @@
     --clue-done-on-unknown: #7d8894;
     --bad: #e5636b;
     --good: #4fd1c5;
+    --warn: #e0a458;
     --shadow: rgba(0,0,0,.5);
   }
   :root[data-theme="dracula"] {
@@ -108,6 +111,7 @@
     --clue-done-on-unknown: #7c809a;
     --bad: #ff5555;
     --good: #50fa7b;
+    --warn: #ffb86c;
     --shadow: rgba(0,0,0,.55);
   }
   :root[data-theme="neon"] {
@@ -134,6 +138,7 @@
     --clue-done-on-unknown: #5a6a85;
     --bad: #ff3864;
     --good: #39ff88;
+    --warn: #ffe066;
     --shadow: rgba(0,229,255,.18);
   }
 
@@ -611,7 +616,7 @@
 
 <table>
   <tr><th>Button</th><th>What it does</th></tr>
-  <tr><td class="k">Check</td><td>Outlines every tile you have marked in the wrong colour, in red. It doesn't tell you what the right answer is.</td></tr>
+  <tr><td class="k">Check</td><td>Outlines every tile you have marked in the wrong colour, in red. It doesn't tell you what the right answer is. Click it a second time to clear those outlines again.</td></tr>
   <tr><td class="k">Hint</td><td>Fills in one tile that is deducible right now, and flashes it so you can see which clue gave it away.</td></tr>
   <tr><td class="k">Undo</td><td>Steps back one mark at a time (<kbd>Ctrl</kbd>+<kbd>Z</kbd>).</td></tr>
   <tr><td class="k">Clear</td><td>Wipes your marks but keeps the same puzzle.</td></tr>
@@ -622,6 +627,21 @@
   <img src="shots/board-check.png" alt="The same board after pressing Check, with one tile outlined in red.">
   <figcaption>Check has found one mistake: that tile was marked dark, but the picture needs it light.</figcaption>
 </figure>
+
+<p>
+  There's a second kind of outline you'll see without pressing anything. <span class="swatch" style="background:var(--warn)"></span>The moment a
+  clue's own number becomes <b>impossible</b> — you've marked more light tiles around it than its number allows,
+  or so many dark tiles that the number can no longer be reached — that <b>clue tile itself</b> gets outlined in
+  your theme's accent colour, not red. It's a live check with no button: it updates after every mark, even
+  before you've filled in the clue's whole 3×3 block, and it points at the clue rather than at which of its
+  tiles is actually wrong.
+</p>
+<p>
+  The two outlines never show at once. <span class="swatch" style="background:var(--bad)"></span><b>Red</b> means
+  Check found a mistake; <span class="swatch" style="background:var(--warn)"></span><b>the accent colour</b> means
+  the live check spotted an impossible clue on its own. While Check's red outlines are up, the live check holds
+  off — click Check again to clear them and it picks back up.
+</p>
 
 <h2><span class="step">7</span>Finishing</h2>
 
