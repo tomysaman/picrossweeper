@@ -613,6 +613,7 @@ for (const name of ['Random', ...Object.keys(ART)]) {
 }
 
 let puzzle, marks, cells = [], history = [], won = false, tapMode = LIGHT;
+let wrongSet = new Set();   // tiles flagged wrong by Check; the live per-clue check waits while this is non-empty
 
 function setStatus(msg, cls = '') { statusEl.textContent = msg; statusEl.className = 'status ' + cls; }
 
@@ -622,7 +623,7 @@ function newGame() {
   const t0 = performance.now();
   puzzle = makePuzzle(n, makeTarget(n, name), difficultySel.value);
   marks = new Uint8Array(n * n);
-  history = []; won = false;
+  history = []; won = false; wrongSet.clear();
   const clueCount = puzzle.clues.reduce((s, v) => s + (v >= 0), 0);
   render();
   setStatus(`${n}×${n} · ${clueCount} clues · generated in ${(performance.now() - t0).toFixed(0)} ms`);
@@ -653,22 +654,27 @@ function refresh() {
     const d = cells[i];
     d.classList.toggle('light', marks[i] === LIGHT);
     d.classList.toggle('dark', marks[i] === DARK);
-    d.classList.remove('wrong');
-    d.classList.remove('impossible');
+    d.classList.toggle('wrong', wrongSet.has(i));
     if (clues[i] >= 0) {
       // "Done" = every tile in the 3×3 block has been marked (regardless of correctness).
       d.classList.toggle('satisfied', nb[i].every(j => marks[j] !== UNK));
     }
   }
-  // Flag a clue the moment its block already has more light tiles than its number allows,
-  // or so many dark tiles that the number can no longer be reached — checked after every mark,
-  // whether or not the block is fully filled in yet.
-  for (let i = 0; i < n * n; i++) {
-    if (clues[i] < 0) continue;
-    const v = clues[i], block = nb[i];
-    let lit = 0, dark = 0;
-    for (const j of block) { if (marks[j] === LIGHT) lit++; else if (marks[j] === DARK) dark++; }
-    if (lit > v || dark > block.length - v) cells[i].classList.add('impossible');
+  // While any Check mistakes are still shown, hold off the live check too — one type of
+  // highlight border on screen at a time.
+  if (wrongSet.size) {
+    for (const d of cells) d.classList.remove('impossible');
+  } else {
+    // Flag a clue the moment its block already has more light tiles than its number allows,
+    // or so many dark tiles that the number can no longer be reached — checked after every
+    // mark, whether or not the block is fully filled in yet.
+    for (let i = 0; i < n * n; i++) {
+      if (clues[i] < 0) continue;
+      const v = clues[i], block = nb[i];
+      let lit = 0, dark = 0;
+      for (const j of block) { if (marks[j] === LIGHT) lit++; else if (marks[j] === DARK) dark++; }
+      cells[i].classList.toggle('impossible', lit > v || dark > block.length - v);
+    }
   }
   checkWin();
 }
@@ -688,6 +694,7 @@ function setMark(i, v) {
   if (won || marks[i] === v) return;
   history.push([i, marks[i]]);
   marks[i] = v;
+  wrongSet.delete(i);
   refresh();
 }
 
@@ -726,23 +733,28 @@ patternSel.onchange = sizeSel.onchange = difficultySel.onchange = newGame;
 
 document.getElementById('undoBtn').onclick = () => {
   if (won || !history.length) return;
-  const [i, prev] = history.pop(); marks[i] = prev; refresh();
+  const [i, prev] = history.pop(); marks[i] = prev; wrongSet.delete(i); refresh();
 };
 document.getElementById('clearBtn').onclick = () => {
   if (won) return;
   if (!confirm('Clear all marks?')) return;
-  marks.fill(UNK); history = []; refresh(); setStatus('');
+  marks.fill(UNK); history = []; wrongSet.clear(); refresh(); setStatus('');
 };
 document.getElementById('checkBtn').onclick = () => {
   if (won) return;
-  let wrong = 0;
-  // Clear the live "impossible clue" borders first so Check's red mistakes aren't confused with them.
-  for (const d of cells) d.classList.remove('impossible');
+  // A second click while mistakes are still shown clears them instead of re-checking.
+  if (wrongSet.size) {
+    wrongSet.clear();
+    setStatus('');
+    refresh();
+    return;
+  }
   for (let i = 0; i < marks.length; i++) {
     if (marks[i] === UNK) continue;
-    if ((marks[i] === LIGHT) !== (puzzle.target[i] === 1)) { cells[i].classList.add('wrong'); wrong++; }
+    if ((marks[i] === LIGHT) !== (puzzle.target[i] === 1)) wrongSet.add(i);
   }
-  setStatus(wrong ? `${wrong} mistake${wrong > 1 ? 's' : ''} highlighted` : 'No mistakes so far', wrong ? 'bad' : '');
+  setStatus(wrongSet.size ? `${wrongSet.size} mistake${wrongSet.size > 1 ? 's' : ''} highlighted` : 'No mistakes so far', wrongSet.size ? 'bad' : '');
+  refresh();
 };
 document.getElementById('hintBtn').onclick = () => {
   if (won) return;

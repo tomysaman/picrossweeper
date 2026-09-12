@@ -1030,8 +1030,12 @@ function draw() {
   if (s >= 4) {
     ctx.lineWidth = Math.max(2, s * 0.15); ctx.strokeStyle = C.bad;
     for (const g of wrongSet) ctx.strokeRect(sx(g % G.W) + 1, sy((g / G.W) | 0) + 1, s - 2, s - 2);
-    ctx.strokeStyle = C.warn;
-    for (const g of autoBadClues) if (!wrongSet.has(g)) ctx.strokeRect(sx(g % G.W) + 1, sy((g / G.W) | 0) + 1, s - 2, s - 2);
+    // While any Check mistakes are still shown, hold off drawing the live check's borders too —
+    // one type of highlight on screen at a time.
+    if (!wrongSet.size) {
+      ctx.strokeStyle = C.warn;
+      for (const g of autoBadClues) ctx.strokeRect(sx(g % G.W) + 1, sy((g / G.W) | 0) + 1, s - 2, s - 2);
+    }
     // current region outline, traced along its true edge
     const rid = G.rid, W = G.W, H = G.H, cr = currentRegion;
     ctx.strokeStyle = C.accent; ctx.lineWidth = 2.5; ctx.globalAlpha = .9; ctx.beginPath();
@@ -1191,9 +1195,14 @@ $('resetBtn').onclick = () => {
 };
 $('checkBtn').onclick = () => {
   if (!G) return;
-  wrongSet.clear();
-  // Clear this region's live "impossible clue" borders first so Check's red mistakes aren't confused with them.
-  for (const g of regionCells(currentRegion)) autoBadClues.delete(g);
+  // A second click while mistakes are still shown clears them instead of re-checking.
+  if (wrongSet.size) {
+    wrongSet.clear();
+    setStatus('');
+    requestDraw();
+    return;
+  }
+  // (The live "impossible clue" borders stay suppressed for as long as wrongSet is non-empty — see draw().)
   for (const g of regionCells(currentRegion)) if (G.marks[g] !== UNK && (G.marks[g] === LIGHT) !== (G.target[g] === 1)) wrongSet.add(g);
   setStatus(wrongSet.size ? `<b>${wrongSet.size} mistake${wrongSet.size > 1 ? 's' : ''}</b> highlighted in region ${currentRegion + 1}` : `<b>No mistakes</b> in region ${currentRegion + 1} so far`, wrongSet.size ? 'bad' : '');
   requestDraw();
