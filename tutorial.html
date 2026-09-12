@@ -193,6 +193,7 @@
     border-radius: 10px; box-shadow: 0 10px 30px var(--shadow);
   }
   figure img.plain { box-shadow: none; }
+  figure img.half { max-width: 50%; }
   figcaption { color: var(--muted); font-size: 14px; text-align: center; margin-top: 10px; font-style: italic; }
   .two-up { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; align-items: start; }
   .two-up figure { margin: 0; }
@@ -423,7 +424,7 @@
 </p>
 
 <figure>
-  <img src="shots/board-mid.png" alt="A partly solved board: cream light tiles and navy dark tiles with X marks, the rest still grey.">
+  <img class="half" src="shots/board-mid.png" alt="A partly solved board: cream light tiles and navy dark tiles with X marks, the rest still grey.">
   <figcaption>Halfway through. Cream tiles are light, navy tiles with an ✕ are dark, grey tiles are still undecided.</figcaption>
 </figure>
 
@@ -664,7 +665,7 @@
 </p>
 
 <figure>
-  <img src="shots/board-solved.png" alt="The completed board showing a heart made of cream tiles on a navy background.">
+  <img class="half" src="shots/board-solved.png" alt="The completed board showing a heart made of cream tiles on a navy background.">
   <figcaption>Solved.</figcaption>
 </figure>
 
