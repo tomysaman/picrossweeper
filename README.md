@@ -4,7 +4,7 @@ A picross × minesweeper puzzle — solve the grid, uncover the picture.
 
 **[Play it here](https://tomysaman.github.io/picrossweeper/)**
 
-![The single-puzzle board mid-solve](shots/board-mid.png)
+![The giant grid mid-solve, panned into one corner of the painting](shots/giant-gameplay.jpg)
 
 ## Overview
 
