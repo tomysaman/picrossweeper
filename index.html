@@ -111,6 +111,69 @@
     --clue-on-unknown: #e6f7ff;
     --shadow: rgba(0,229,255,.18);
   }
+  :root[data-theme="marquee"] {
+    --bg: #f2f2f2;
+    --panel: #ffffff;
+    --ink: #141414;
+    --muted: #5c5c5c;
+    --footer: #8c8c8c;
+    --btn: #ececec;
+    --btn-border: #d0d0d0;
+    --btn-hover: #e0e0e0;
+    --accent: #db2027;
+    --accent-hover: #ef3b41;
+    --on-accent: #ffffff;
+    --unknown: #bdbdbd;
+    --light: #ffffff;
+    --dark: #1a1a1a;
+    --x-mark: #db2027;
+    --clue-on-light: #141414;
+    --clue-on-dark: #f2f2f2;
+    --clue-on-unknown: #141414;
+    --shadow: rgba(0,0,0,.12);
+  }
+  :root[data-theme="redline"] {
+    --bg: #0d0d0d;
+    --panel: #161616;
+    --ink: #f5f5f5;
+    --muted: #9a9a9a;
+    --footer: #6b6b6b;
+    --btn: #1f1f1f;
+    --btn-border: #333333;
+    --btn-hover: #2a2a2a;
+    --accent: #ff1e3c;
+    --accent-hover: #ff4d63;
+    --on-accent: #0d0d0d;
+    --unknown: #232323;
+    --light: #f5f5f5;
+    --dark: #3a0a10;
+    --x-mark: #ff1e3c;
+    --clue-on-light: #0d0d0d;
+    --clue-on-dark: #f5d9dc;
+    --clue-on-unknown: #f5f5f5;
+    --shadow: rgba(0,0,0,.6);
+  }
+  :root[data-theme="circuit"] {
+    --bg: #0d0d0d;
+    --panel: #161616;
+    --ink: #f0f0f0;
+    --muted: #9a9a9a;
+    --footer: #6b6b6b;
+    --btn: #1f1f1f;
+    --btn-border: #333333;
+    --btn-hover: #2a2a2a;
+    --accent: #2fd66d;
+    --accent-hover: #58e28f;
+    --on-accent: #0d0d0d;
+    --unknown: #242424;
+    --light: #e8fff0;
+    --dark: #123a1f;
+    --x-mark: #2fd66d;
+    --clue-on-light: #0d0d0d;
+    --clue-on-dark: #d8ffe4;
+    --clue-on-unknown: #f0f0f0;
+    --shadow: rgba(0,0,0,.6);
+  }
 
   * { box-sizing: border-box; }
   html, body { margin: 0; }
@@ -228,6 +291,9 @@
       <option value="nocturne">Nocturne</option>
       <option value="dracula">Dracula</option>
       <option value="neon">Neon</option>
+      <option value="marquee">Marquee</option>
+      <option value="redline">Redline</option>
+      <option value="circuit">Circuit</option>
     </select>
   </div>
 </div>

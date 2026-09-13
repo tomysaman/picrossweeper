@@ -43,8 +43,7 @@ and the two deductions that solve any board.
   current mistakes, without giving away the rest of the solution
 - **Playable on mobile** — touch-friendly controls with a switchable tap mode for
   painting light or dark tiles with a single tap
-- **Five colour themes** — Tavern, Proverbs, Nocturne, Dracula, and Neon, shared
-  across every page
+- **Multiple colour themes** — shared across every page
 - **Progress saved automatically** on the giant grid, so a painting can be solved
   region by region over multiple sessions
 
