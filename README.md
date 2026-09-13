@@ -17,15 +17,15 @@ never anything to guess.
 
 Picrossweeper comes in two forms:
 
-- **Single puzzle** ([`single.html`](single.html)) — one board at a time, 10×10 up
+- **Single puzzle** ([play it](https://tomysaman.github.io/picrossweeper/single.html)) — one board at a time, 10×10 up
   to 25×25, hiding a small piece of pixel art. Pick a picture, pick a difficulty,
   take as long as you like.
-- **Giant grid** ([`giant.html`](giant.html)) — one continuous painting, up to
+- **Giant grid** ([play it](https://tomysaman.github.io/picrossweeper/giant.html)) — one continuous painting, up to
   ~54,000 tiles, cut into hundreds of irregularly-shaped regions and panned and
   zoomed like a map. Solve one region at a time; the artwork appears behind you as
   you go.
 
-A [visual tutorial](tutorial.html) walks through the rule, every clue from 0 to 9,
+A [visual tutorial](https://tomysaman.github.io/picrossweeper/tutorial.html) walks through the rule, every clue from 0 to 9,
 and the two deductions that solve any board.
 
 ## Features
