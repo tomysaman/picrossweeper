@@ -1013,11 +1013,12 @@ function setMark(g, v, record = true) {
   if (G.done[r]) return;                       // completed regions are locked
   ensureRegion(r);                             // fix the region's clues/target before the first mark lands
   if (record) history.push([g, G.marks[g]]);
-  G.marks[g] = v; wrongSet.delete(g);
+  G.marks[g] = v;
+  const fixedLastMistake = wrongSet.delete(g) && !wrongSet.size;
   updateAutoBad(r);
   paintTile(g);
   if (regionComplete(r)) { G.done[r] = 1; repaintRegion(r); setStatus(`<b>Region ${r + 1} revealed!</b> ${doneCount()} of ${G.count} regions complete`, 'win'); }
-  else flushPix();
+  else { if (fixedLastMistake) updateStatus(); flushPix(); }
   saveProgressSoon(); requestDraw();
 }
 const doneCount = () => G.done.reduce((s, v) => s + v, 0);

@@ -784,7 +784,7 @@ function setMark(i, v) {
   if (won || marks[i] === v) return;
   history.push([i, marks[i]]);
   marks[i] = v;
-  wrongSet.delete(i);
+  if (wrongSet.delete(i) && !wrongSet.size) setStatus('');
   refresh();
 }
 
@@ -823,7 +823,9 @@ patternSel.onchange = sizeSel.onchange = difficultySel.onchange = newGame;
 
 document.getElementById('undoBtn').onclick = () => {
   if (won || !history.length) return;
-  const [i, prev] = history.pop(); marks[i] = prev; wrongSet.delete(i); refresh();
+  const [i, prev] = history.pop(); marks[i] = prev;
+  if (wrongSet.delete(i) && !wrongSet.size) setStatus('');
+  refresh();
 };
 document.getElementById('clearBtn').onclick = () => {
   if (won) return;
