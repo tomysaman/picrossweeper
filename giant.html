@@ -1007,6 +1007,14 @@ function repaintRegion(r) { for (const g of regionCells(r)) paintTile(g); flushP
 function flushPix() { G.tileCanvas.getContext('2d').putImageData(G.pix, 0, 0); }
 
 // ---------- marks / progress ----------
+// Editing a tile Check flagged wrong clears just that highlight; editing any other tile
+// while Check highlights are showing exits check mode entirely (clears them all).
+function clearWrongAt(g) {
+  if (!wrongSet.size) return false;
+  if (wrongSet.has(g)) { wrongSet.delete(g); return !wrongSet.size; }
+  wrongSet.clear();
+  return true;
+}
 function setMark(g, v, record = true) {
   if (!G || G.marks[g] === v) return;
   const r = regionOf(g);
@@ -1014,11 +1022,11 @@ function setMark(g, v, record = true) {
   ensureRegion(r);                             // fix the region's clues/target before the first mark lands
   if (record) history.push([g, G.marks[g]]);
   G.marks[g] = v;
-  const fixedLastMistake = wrongSet.delete(g) && !wrongSet.size;
+  const exitedCheckMode = clearWrongAt(g);
   updateAutoBad(r);
   paintTile(g);
   if (regionComplete(r)) { G.done[r] = 1; repaintRegion(r); setStatus(`<b>Region ${r + 1} revealed!</b> ${doneCount()} of ${G.count} regions complete`, 'win'); }
-  else { if (fixedLastMistake) updateStatus(); flushPix(); }
+  else { if (exitedCheckMode) updateStatus(); flushPix(); }
   saveProgressSoon(); requestDraw();
 }
 const doneCount = () => G.done.reduce((s, v) => s + v, 0);

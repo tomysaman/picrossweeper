@@ -780,11 +780,24 @@ function checkWin() {
   setStatus('✦ Picture revealed! ✦', 'win');
 }
 
+// Editing a tile Check flagged wrong clears just that highlight; editing any other tile
+// while Check highlights are showing exits check mode entirely (clears them all).
+function clearWrongAt(i) {
+  if (!wrongSet.size) return;
+  if (wrongSet.has(i)) {
+    wrongSet.delete(i);
+    if (!wrongSet.size) setStatus('');
+  } else {
+    wrongSet.clear();
+    setStatus('');
+  }
+}
+
 function setMark(i, v) {
   if (won || marks[i] === v) return;
   history.push([i, marks[i]]);
   marks[i] = v;
-  if (wrongSet.delete(i) && !wrongSet.size) setStatus('');
+  clearWrongAt(i);
   refresh();
 }
 
@@ -824,7 +837,7 @@ patternSel.onchange = sizeSel.onchange = difficultySel.onchange = newGame;
 document.getElementById('undoBtn').onclick = () => {
   if (won || !history.length) return;
   const [i, prev] = history.pop(); marks[i] = prev;
-  if (wrongSet.delete(i) && !wrongSet.size) setStatus('');
+  clearWrongAt(i);
   refresh();
 };
 document.getElementById('clearBtn').onclick = () => {
