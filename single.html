@@ -654,36 +654,76 @@ function makePuzzle(n, target, diffName = 'normal') {
     if (avoidExtremes) { const good = list.filter(i => !trivial(i)); if (good.length >= k) list = good; }
     return list.slice(0, k);
   };
-  const clues = new Int8Array(total).fill(-1);
+  // Two rules rank above everything else here, in this order:
+  //   1. The puzzle must solve by logic alone — no guessing. Every step below either keeps the
+  //      solver's verdict "solved" or is re-checked against it, so this holds whatever else happens.
+  //   2. Numbers shouldn't echo each other. clashOf scores how much a value repeats the clues touching
+  //      it (same number worst, then ±1, ±2), and is only ever used to choose between options that
+  //      rule 1 already accepts, so it can't cost solvability.
+  let clues;
+  const clashOf = (i, v) => {
+    let s = 0;
+    for (const j of nb[i]) {
+      if (j === i || clues[j] < 0) continue;
+      const d = Math.abs(v - clues[j]);
+      if (d === 0) s += 3; else if (d === 1) s += 2; else if (d === 2) s += 1;
+    }
+    return s;
+  };
 
-  // Seed with random clues.
-  for (const i of choose(shuffle([...Array(total).keys()]), Math.round(total * 0.18))) clues[i] = count(i);
+  attempt: for (;;) {
+    clues = new Int8Array(total).fill(-1);
+    // Seed with random clues.
+    for (const i of choose(shuffle([...Array(total).keys()]), Math.round(total * 0.18))) clues[i] = count(i);
 
-  // Add clues until the solver can finish without guessing. Deductions only grow as clues are
-  // added, so each solve continues from the previous state instead of starting over.
-  let prev = null;
-  for (;;) {
-    const { state, solved } = solve(n, nb, clues, prev); prev = state;
-    if (solved) break;
-    // Candidate spots for a new clue: any non-clue cell whose 3×3 block touches an unknown cell.
-    // (Unknown cells may themselves already be clues — e.g. two adjacent clue tiles that only know
-    // "one of us is light" — so we must be allowed to place the clue on an already-solved neighbor.)
-    const cand = new Set();
-    for (let i = 0; i < total; i++) if (state[i] === UNK) for (const j of nb[i]) if (clues[j] < 0) cand.add(j);
-    const list = [...cand];
-    // Prefer unknown cells that touch the solved frontier — gives the most local leverage.
-    const frontier = list.filter(i => state[i] === UNK && nb[i].some(j => state[j] !== UNK));
-    const pool = shuffle(frontier.length ? frontier : list);
-    const pick = choose(pool)[0];
-    clues[pick] = count(pick);
+    // Add clues until the solver can finish without guessing. Deductions only grow as clues are
+    // added, so each solve continues from the previous state instead of starting over.
+    let prev = null;
+    for (;;) {
+      const { state, solved } = solve(n, nb, clues, prev); prev = state;
+      if (solved) break attempt;
+      // Candidate spots for a new clue: any non-clue cell whose 3×3 block touches an unknown cell.
+      // (Unknown cells may themselves already be clues — e.g. two adjacent clue tiles that only know
+      // "one of us is light" — so we must be allowed to place the clue on an already-solved neighbor.)
+      const cand = new Set();
+      for (let i = 0; i < total; i++) if (state[i] === UNK) for (const j of nb[i]) if (clues[j] < 0) cand.add(j);
+      const list = [...cand];
+      if (!list.length) {
+        // Every tile that could help is already a clue and some tiles are still open: the picture has
+        // "twins" no set of clues can tell apart (on a 20×20 board two different pictures can share
+        // every number). Change one stuck tile of the art and start over — the clues placed so far
+        // were counted from the old picture, so none of them can be kept.
+        const stuck = []; for (let i = 0; i < total; i++) if (state[i] === UNK) stuck.push(i);
+        target[stuck[rnd(stuck.length)]] ^= 1;
+        continue attempt;
+      }
+      // Prefer unknown cells that touch the solved frontier — gives the most local leverage. Among
+      // those, take the one whose number stands out most from the clues around it.
+      const frontier = list.filter(i => state[i] === UNK && nb[i].some(j => state[j] !== UNK));
+      let pool = shuffle(frontier.length ? frontier : list);
+      if (avoidExtremes) { const good = pool.filter(i => !trivial(i)); if (good.length) pool = good; }
+      let pick = pool[0], least = Infinity;
+      for (let k = 0; k < pool.length && k < 40; k++) {
+        const c = clashOf(pool[k], count(pool[k]));
+        if (c < least) { least = c; pick = pool[k]; }
+        if (c === 0) break;
+      }
+      clues[pick] = count(pick);
+    }
   }
 
-  // Prune: drop any clue that isn't needed to keep the puzzle solvable.
-  // Trivial 0/9 clues are tried first so they only survive when truly needed.
-  let order = shuffle([...Array(total).keys()].filter(i => clues[i] >= 0));
-  if (avoidExtremes) order = [...order.filter(trivial), ...order.filter(i => !trivial(i))];
-  for (const i of order) {
-    if (Math.random() < keep && !(avoidExtremes && trivial(i))) continue;
+  // Prune: drop any clue that isn't needed to keep the puzzle solvable. The loudest echoes go first,
+  // and trivial 0/9 clues ahead of the rest when the difficulty asks for it, so both only survive
+  // where the solve needs them. Every removal is re-checked by the solver.
+  const pool = shuffle([...Array(total).keys()].filter(i => clues[i] >= 0));
+  while (pool.length) {
+    let at = 0, worst = -1, worstClash = 0;
+    for (let k = 0; k < pool.length; k++) {
+      const i = pool[k], cl = clashOf(i, clues[i]), score = (avoidExtremes && trivial(i) ? 1000 : 0) + cl;
+      if (score > worst) { worst = score; at = k; worstClash = cl; }
+    }
+    const i = pool[at]; pool[at] = pool[pool.length - 1]; pool.pop();
+    if (!(avoidExtremes && trivial(i)) && Math.random() < keep / (1 + worstClash)) continue;
     const v = clues[i]; clues[i] = -1;
     if (!solve(n, nb, clues).solved) clues[i] = v;
   }

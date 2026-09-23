@@ -552,6 +552,13 @@ const DIFFICULTY = {
 // carry a 0 or a "block full" clue, so a big expanse of them is a chore with nothing to deduce.
 const FLAT_CAP = 45;
 
+// Two rules outrank everything else in how a board is made, in this order:
+//   1. Every region must solve by logic alone — no guessing. This is enforced here, last, on whatever
+//      art arrives: clues are added until the solver finishes, every pruned clue is re-checked, and
+//      nothing afterwards is allowed to remove a clue.
+//   2. Minimise repetition. The art is de-patterned before it gets here (breakUpPatterns, breakUpFlats),
+//      and clashOf below steers which clues are used — but only ever by choosing between options that
+//      rule 1 has already accepted, so it can never cost solvability.
 // Deterministic (seeded) generator: adds clues until logic alone solves the region, then prunes.
 // Irregular regions can contain "twin" tiles whose neighbourhoods are identical, which no clue set can
 // separate; in that case one stuck tile's target is flipped (a 1-tile change to the art) and we retry.
@@ -578,6 +585,7 @@ function makeRegionClues(target, nb, keep, rnd, avoidExtremes = false) {
     return s;
   };
   let clues, flips = 0;
+  const flipped = new Set();   // tiles already changed to break a twin, across restarts
   attempt: for (;;) {
     clues = new Int8Array(total).fill(-1);
     for (const i of choose(shuffle([...Array(total).keys()], rnd), Math.round(total * 0.18))) clues[i] = count(i);
@@ -589,8 +597,21 @@ function makeRegionClues(target, nb, keep, rnd, avoidExtremes = false) {
       for (let i = 0; i < total; i++) if (state[i] === UNK) for (const j of nb[i]) if (clues[j] < 0) cand.add(j);
       const list = [...cand];
       if (!list.length) {   // every relevant tile is already a clue → ambiguous twins; alter the art minimally
-        const stuck = []; for (let i = 0; i < total; i++) if (state[i] === UNK) stuck.push(i);
-        target[stuck[Math.floor(rnd() * stuck.length)]] ^= 1; flips++;
+        // Any stuck tile will do for solvability, so pick the one that does least harm to the
+        // anti-repetition work already done on the art: flipping a lone dot back into its
+        // background re-merges the blank expanse breakUpFlats cut up, so prefer the flip that
+        // leaves the fewest blocks all one colour.
+        const stuck = shuffle([...Array(total).keys()].filter(i => state[i] === UNK), rnd);
+        const uniformAfter = i => {
+          target[i] ^= 1; let n = 0;
+          for (const j of nb[i]) { let lit = 0; for (const k of nb[j]) lit += target[k]; if (lit === 0 || lit === nb[j].length) n++; }
+          target[i] ^= 1; return n;
+        };
+        // Never flip the same tile twice: the least-harm choice would otherwise happily undo its own
+        // previous flip and oscillate between two ambiguous pictures.
+        let flip = stuck[0], best = Infinity;
+        for (const i of stuck) { const u = uniformAfter(i) + (flipped.has(i) ? 100 : 0); if (u < best) { best = u; flip = i; } }
+        target[flip] ^= 1; flips++; flipped.add(flip);
         continue attempt;
       }
       const frontier = list.filter(i => state[i] === UNK && nb[i].some(j => state[j] !== UNK));
@@ -838,14 +859,16 @@ const PATTERN_CAP = 30;        // smallest shift-invariant patch worth breaking 
 const BUSY_PAIRS = 8;          // of the 12 neighbouring pairs in a 3×3 window (12 = a perfect checkerboard)
 const BUSY_CAP = 5;            // ... and busy patches read as a pattern at a fraction of that size
 const PATTERN_NOISE = 0.11;    // share of a patch's tiles to flip: enough that no window survives intact
+const PATTERN_PASSES = 12;     // safety bound only; real pictures finish in a handful
 
 function breakUpPatterns(target, W, H, cap, rnd) {
   const N = W * H;
   let flips = 0;
   // One round of noise shrinks a patch without dissolving it, so keep going until nothing is left
-  // over the cap -- or until three rounds have been spent, which stops a pathological picture from
-  // being sanded down to static.
-  for (let pass = 0; pass < 3; pass++) {
+  // over the cap. Minimising repetition outranks fidelity to the painting (only the solvability
+  // guarantee, enforced later per region, ranks higher), so this runs to completion; the pass limit
+  // only exists so a hostile uploaded image can't loop forever.
+  for (let pass = 0; pass < PATTERN_PASSES; pass++) {
   const periodic = new Uint8Array(N), checker = new Uint8Array(N);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const i = y * W + x;
@@ -897,10 +920,10 @@ function breakUpPatterns(target, W, H, cap, rnd) {
 // 3×3 cell at a time and give each cell nought to three flipped tiles at seeded random positions.
 // Even spacing would put one flipped tile in every block and turn the whole expanse into 8s, which is
 // the same chore as before with more reading; varied spacing gives the run a spread of numbers.
-// Random placement can leave a cell's worth of the run flat, so repeat until nothing is over the cap,
-// falling back on the fixed one-per-cell lattice to guarantee the last pass terminates.
-function planCell(rnd, strict) {
-  if (strict) return [4];                                   // the middle of the cell
+// Random placement can leave a cell's worth of the run flat, so repeat until nothing is over the cap.
+// There is deliberately no fixed-lattice fallback: an even lattice is exactly the repeating pattern
+// this exists to avoid, and a flat run left over the cap costs only some tedium, not solvability.
+function planCell(rnd) {
   const r = rnd(), n = r < 0.15 ? 0 : r < 0.7 ? 1 : r < 0.92 ? 2 : 3;
   const free = [0, 1, 2, 3, 4, 5, 6, 7, 8], out = [];
   for (let k = 0; k < n; k++) out.push(free.splice((rnd() * free.length) | 0, 1)[0]);
@@ -910,7 +933,7 @@ function planCell(rnd, strict) {
 function breakUpFlats(target, W, H, cap, rnd) {
   const N = W * H;
   let flips = 0;
-  for (let pass = 0; pass < 4; pass++) {
+  for (let pass = 0; pass < PATTERN_PASSES; pass++) {
     const flat = new Uint8Array(N);
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       const i = y * W + x; let same = true;
@@ -923,11 +946,11 @@ function breakUpFlats(target, W, H, cap, rnd) {
     }
     const big = components(flat, W, H).filter(c => c.length > cap);
     if (!big.length) break;
-    const strict = pass === 3, cells = new Map();
+    const cells = new Map();
     for (const comp of big) for (const i of comp) {
       const x = i % W, y = (i / W) | 0, ck = ((y / 3) | 0) * W + ((x / 3) | 0);
       let plan = cells.get(ck);
-      if (plan === undefined) { plan = planCell(rnd, strict); cells.set(ck, plan); }
+      if (plan === undefined) { plan = planCell(rnd); cells.set(ck, plan); }
       if (plan.includes((y % 3) * 3 + (x % 3))) { target[i] ^= 1; flips++; }
     }
   }
@@ -1038,7 +1061,7 @@ function saveProgress() {
 // v5: the two-tone pattern changes whenever the threshold or flat-area handling does, and marks saved
 // against an older pattern would read as mistakes, so each change takes a new key. Old saves are
 // simply not picked up.
-const saveKey = () => `pw.save.v10.${G.key}.${G.W}x${G.H}.${G.diffName}`;
+const saveKey = () => `pw.save.v11.${G.key}.${G.W}x${G.H}.${G.diffName}`;
 function loadProgress() {
   try {
     const s = localStorage.getItem(saveKey()); if (!s) return;
