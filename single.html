@@ -723,7 +723,7 @@ function makePuzzle(n, target, diffName = 'normal') {
       if (score > worst) { worst = score; at = k; worstClash = cl; }
     }
     const i = pool[at]; pool[at] = pool[pool.length - 1]; pool.pop();
-    if (!(avoidExtremes && trivial(i)) && Math.random() < keep / (1 + worstClash)) continue;
+    if (!(avoidExtremes && trivial(i)) && Math.random() < keep) continue;
     const v = clues[i]; clues[i] = -1;
     if (!solve(n, nb, clues).solved) clues[i] = v;
   }
